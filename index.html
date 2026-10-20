@@ -160,6 +160,7 @@ details.prep .ul{margin:0 0 10px 4px;padding-left:12px;border-left:3px solid var
 .kpi.warn{background:var(--warn-bg);border-color:transparent;color:var(--warn)}
 .kpi.bad{background:var(--bad-bg);border-color:transparent;color:var(--bad)}
 .back{display:inline-flex;align-items:center;gap:6px;font-weight:800;color:var(--ouro);padding:6px 0;font-size:15px}
+.side-brand{display:none}
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(255,255,255,.97);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--linha);padding:8px 10px calc(8px + env(safe-area-inset-bottom))}
 .nav-in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:60px;border-radius:18px;font-size:11.5px;font-weight:800;color:#9A836B;transition:background-color .15s,color .15s,transform .09s}
@@ -190,6 +191,33 @@ details.prep .ul{margin:0 0 10px 4px;padding-left:12px;border-left:3px solid var
 #toast.show{opacity:1;transform:translate(-50%,0)}
 .fade-in{animation:fi .22s ease}
 @keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+/* ===== VERSÃO COMPUTADOR (tela larga): menu lateral, conteúdo mais largo, janelas no centro ===== */
+@media (min-width: 900px) {
+  .hdr { padding-left: 232px; }
+  .hdr-in { max-width: 1080px; margin: 0; padding: 0 36px; height: 76px; }
+  .hdr-logo { display: none; }
+  .hdr-in .font-marca { font-size: 26px; }
+  .nav { top: 0; right: auto; width: 232px; padding: 0 14px 20px; border-top: 0; border-right: 1px solid var(--linha); display: flex; flex-direction: column; justify-content: flex-start; background: #fff; }
+  .side-brand { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 26px 8px 22px; border-bottom: 1px solid var(--linha); margin-bottom: 14px; }
+  .nav-in { display: flex; flex-direction: column; gap: 6px; max-width: none; }
+  .nav button { flex-direction: row; justify-content: flex-start; gap: 12px; min-height: 52px; padding: 0 14px; border-radius: 16px; font-size: 15px; }
+  .nav button:hover:not(.on) { background: var(--leite); color: var(--cafe); }
+  .nav .navico { width: 24px; }
+  main { margin-left: 232px; max-width: 1080px; padding: 26px 36px 56px; }
+  .sheet { left: 50%; right: auto; bottom: auto; top: 50%; max-width: none; width: min(640px, calc(100vw - 280px)); max-height: 86vh; border-radius: 28px; margin: 0; transform: translate(-50%, -44%); opacity: 0; transition: transform .24s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+  .sheet.show { transform: translate(-50%, -50%); opacity: 1; }
+  .sheet-grip { display: none; }
+  .sheet-head { padding-top: 22px; }
+  #toast { left: calc(50% + 116px); bottom: 28px; }
+  #dGrid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  #pcBody .grid.gap-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pcard:hover { border-color: var(--leite-2); transform: translateY(-2px); }
+  .pr-row:hover, .row-btn:hover { background: #FFFDF9; }
+  .card { transition: box-shadow .2s, transform .2s; }
+  .inp:hover { border-color: #D8C7B0; }
+  .lock { left: 232px; }
+  .lock-in { max-width: 360px; }
+}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -706,11 +734,11 @@ function bannerSenha() {
 /* ================= NAVEGAÇÃO ================= */
 const TITULOS = { prop: 'Proporções', cru: 'Cru × Cozido', dia: 'Produção diária', preco: 'Precificação', admin: 'Administração' };
 function montarCasca() {
-  $('#hdr').innerHTML = logoSVG(38) +
+  $('#hdr').innerHTML = '<span class="hdr-logo">' + logoSVG(38) + '</span>' +
     '<div class="flex-1 min-w-0 leading-tight"><div class="font-marca text-[23px]" style="letter-spacing:.04em">Balayó</div>' +
     '<div id="hdrTitle" class="lbl" style="font-size:11px;letter-spacing:.16em"></div></div>' +
     '<button id="btnAdmin" class="iconbtn" data-act="admin"></button>';
-  $('#nav').innerHTML = '<div class="nav-in">' +
+  $('#nav').innerHTML = '<div class="side-brand">' + logoSVG(64) + wordmark(24) + '</div><div class="nav-in">' +
     [['prop', 'Proporções'], ['cru', 'Cru × Cozido'], ['dia', 'Diário'], ['preco', 'Preços']].map(([t, n]) =>
       '<button data-tab="' + t + '"><span class="navico">' + ic(t, 24, 2) + (t === 'preco' ? '<span id="navLock" class="navlock">' + ic('lock', 10, 3) + '</span>' : '') + '</span><span>' + n + '</span></button>').join('') + '</div>';
 }
