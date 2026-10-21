@@ -161,9 +161,13 @@ details.prep .ul{margin:0 0 10px 4px;padding-left:12px;border-left:3px solid var
 .kpi.bad{background:var(--bad-bg);border-color:transparent;color:var(--bad)}
 .back{display:inline-flex;align-items:center;gap:6px;font-weight:800;color:var(--ouro);padding:6px 0;font-size:15px}
 .side-brand{display:none}
+.chkbox{width:30px;height:30px;border-radius:10px;border:2.5px solid var(--ouro);display:grid;place-items:center;flex-shrink:0;color:#fff;transition:background-color .15s}
+.chkbox.on{background:var(--cafe);border-color:var(--cafe)}
+.balcao p,.balcao .li b,.balcao .ins-row span{font-size:19px}
+.balcao .li span{font-size:18px}
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(255,255,255,.97);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--linha);padding:8px 10px calc(8px + env(safe-area-inset-bottom))}
-.nav-in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:60px;border-radius:18px;font-size:11.5px;font-weight:800;color:#9A836B;transition:background-color .15s,color .15s,transform .09s}
+.nav-in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:60px;border-radius:18px;font-size:10.5px;letter-spacing:-.01em;font-weight:800;color:#9A836B;transition:background-color .15s,color .15s,transform .09s}
 .nav button:active{transform:scale(.94)}
 .nav button.on{background:var(--cafe);color:#fff}
 .navico{position:relative;display:inline-flex}
@@ -231,6 +235,13 @@ details.prep .ul{margin:0 0 10px 4px;padding-left:12px;border-left:3px solid var
 <script>
 (function () {
 'use strict';
+/* ================= NUVEM (Firebase) =================
+   Configuração do projeto Firebase (veja docs/NUVEM-PASSO-A-PASSO.md).
+   Enquanto estiver vazia, o Painel da equipe mostra só os registros deste aparelho.
+   Exemplo: const NUVEM_CONFIG = { apiKey: '...', authDomain: '...', projectId: '...', appId: '...' }; */
+const NUVEM_CONFIG = {};
+const FIREBASE_VER = '10.12.2';
+
 /* ================= UTILIDADES ================= */
 const $ = (s, el) => (el || document).querySelector(s);
 const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
@@ -306,7 +317,9 @@ const I = {
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   upload: '<path d="M12 16V5M7 10l5-5 5 5M5 20h14"/>',
   undo: '<path d="M9 7L4 12l5 5"/><path d="M4 12h10a6 6 0 0 1 0 12h-2" transform="translate(0 -6)"/>',
-  del: '<path d="M21 6H8l-5 6 5 6h13z"/><path d="M12 9l6 6M18 9l-6 6"/>'
+  del: '<path d="M21 6H8l-5 6 5 6h13z"/><path d="M12 9l6 6M18 9l-6 6"/>',
+  bar: '<path d="M5 4h14l-1.6 6.2A5.4 5.4 0 0 1 12 14.5a5.4 5.4 0 0 1-5.4-4.3z"/><path d="M12 14.5V20M8 20h8"/>',
+  chk: '<rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 9.5l2 2 3.5-3.5M9 15.5h6"/>'
 };
 const ic = (n, s, w) => '<svg class="ic" width="' + (s || 22) + '" height="' + (s || 22) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (w || 2) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + I[n] + '</svg>';
 
@@ -456,6 +469,136 @@ const DEF_CONFIG = {
     metodo: 'divisor', rateio: 'minuto', faturamento: 0, arred: 0.5, cmvMeta: 30
   }
 };
+/* ================= BAR E CHECKLISTS (dados iniciais) ================= */
+// Receitas do bar: EM TESTE, vindas da proposta do livro (Anexo A). Medidas vazias = a definir.
+const ckOk = t => ({ t, tipo: 'ok' });
+const ckNum = (t, un) => ({ t, tipo: 'num', un });
+const ckSec = t => ({ t, tipo: 'sec' }); // título de seção (não conta como item)
+const bebSeed = (id, nome, cat, comp, serv, tempo, obs) => ({ id, nome, cat, comp, serv, tempo, temp: '', modo: '', obs, status: 'teste' });
+const SEED_BEB = [
+  bebSeed('b_espresso', 'Espresso', 'Cafés', [['Café em grãos', '18', 'g'], ['Bebida extraída', '36', 'g']], '35–55 ml · xícara 70–90 ml', '45–75 s', 'Perfil de extração completo e regra do espresso simples: pendentes.'),
+  bebSeed('b_cappuccino', 'Cappuccino', 'Com leite', [['Espresso', '1', 'dose'], ['Leite incorporado', '100', 'g']], '150–170 ml · xícara 180 ml', '90–120 s', 'Expansão da espuma e carga do pitcher: pendentes.'),
+  bebSeed('b_latte', 'Latte', 'Com leite', [['Espresso', '1', 'dose'], ['Leite com microespuma', '160', 'g']], '210–230 ml · xícara 250 ml', '90–120 s', 'Diferença percebida do cappuccino: a confirmar.'),
+  bebSeed('b_coado', 'Coado da casa', 'Cafés', [['Café moído', '15', 'g'], ['Água (~93 °C)', '250', 'g']], '~210–225 ml medido · 250 ml', '3–4 min', 'Método, moagem, despejos e rendimento: pendentes.'),
+  bebSeed('b_cafe_leite', 'Café com leite', 'Com leite', [['Coado da casa', '100', 'g'], ['Leite aquecido', '100', 'g']], '~200 ml · xícara 250 ml', '3–5 min', 'Sem espuma. Proporção a validar com o público.'),
+  bebSeed('b_baunilhado', 'Baunilhado do Balayó', 'Com leite', [['Espresso', '1', 'dose'], ['Leite', '140', 'g'], ['Calda de baunilha', '15', 'g']], '210–230 ml · 250 ml', '100–140 s', 'Dosagem da calda a confirmar.'),
+  bebSeed('b_baunilhado_sc', 'Baunilhado sem café', 'Com leite', [['Leite', '180', 'g'], ['Calda de baunilha', '15', 'g']], '200–220 ml · 250 ml', '90–120 s', 'Receita própria a validar.'),
+  bebSeed('b_latte_gelado', 'Latte gelado', 'Gelados', [['Espresso', '1', 'dose'], ['Leite frio', '120', 'g'], ['Gelo', '100', 'g']], '~280–310 ml · copo 350 ml', '60–90 s', 'Temperatura em 0, 5 e 10 min (meta inicial ≤ 8 °C).'),
+  bebSeed('b_latte_gelado_bau', 'Latte gelado de baunilha', 'Gelados', [['Latte gelado', '1', 'receita'], ['Calda de baunilha', '15', 'g']], '~280–310 ml · copo 350 ml', '60–90 s', 'Mesma validação do latte gelado.'),
+  bebSeed('b_choc', 'Chocolate quente (sem adição de café)', 'Chocolates', [['Leite', '180', 'g'], ['Chocolate meio amargo', '30', 'g']], '200–220 ml · 250 ml', '2–3 min', 'Temperatura de servir 60–65 °C (referência sensorial).'),
+  bebSeed('b_mocha', 'Mocha', 'Chocolates', [['Chocolate quente', '1', 'receita'], ['Espresso', '1', 'dose']], '235–255 ml · 300 ml', '2–3 min', 'Tamanho a confirmar.'),
+  bebSeed('b_affogato', 'Affogato', 'Cafés', [['Sorvete de creme', '70', 'g'], ['Espresso', '1', 'dose']], 'bowl 180–220 ml', '60–90 s', 'Densidade do sorvete a cadastrar em ml.'),
+  bebSeed('b_soda_maracuja', 'Soda de maracujá', 'Refrescantes', [['Base de maracujá', '30', 'g'], ['Água com gás', '150', 'ml'], ['Gelo', '100', 'g']], '~280–310 ml · copo 350 ml', '40–60 s', 'Base comercial ou própria a definir.'),
+  bebSeed('b_soda_limao', 'Soda de limão com hortelã', 'Refrescantes', [['Suco de limão', '15', 'g'], ['Xarope simples', '15', 'g'], ['Água com gás', '150', 'ml'], ['Gelo', '100', 'g'], ['Hortelã', '0,5', 'g']], '~280–310 ml · copo 350 ml', '60–90 s', 'Condicional: confirmar se entra no cardápio.'),
+  bebSeed('b_infusao_quente', 'Infusão quente da casa', 'Chás e infusões', [['Produto seco', '2', 'g'], ['Água', '220', 'g']], '200–215 ml · 250–300 ml', '4–7 min', 'Escolha dos 2 produtos e tempo/temperatura de cada um: pendentes.'),
+  bebSeed('b_infusao_gelada', 'Infusão gelada', 'Chás e infusões', [['Produto seco', '3', 'g'], ['Água quente', '150', 'g'], ['Gelo', '100', 'g']], '230–250 ml · 300–350 ml', '4–7 min', 'Equilíbrio após resfriamento: a confirmar.'),
+  bebSeed('b_coado_500', 'Coado para compartilhar (500 ml)', 'Para compartilhar', [['Café moído', '', 'g'], ['Água', '', 'g']], '500 ml · jarra', 'a medir', 'Receita própria a desenvolver. Não é 2× o coado individual.')
+];
+// Checklists prontos. Itens de Bar vêm do Anexo B (BAR-01 e BAR-15). Cozinha e Salão ficam vazios, como pede o documento.
+const SEED_CHK = [
+  { id: 'bar_abertura', setor: 'Bar', momento: 'Abertura', codigo: 'BAR-01', titulo: 'Abertura e liberação do posto', prazo: 'Antes das 14h', items: [
+    ckOk('Higiene pessoal e condições da equipe'), ckOk('Lavatório abastecido'), ckOk('Posto e utensílios limpos'), ckOk('Água e vazamentos conferidos'),
+    ckOk('Equipamentos ligados conforme o manual'), ckNum('Temperatura da geladeira', '°C'), ckNum('Temperatura do freezer', '°C'),
+    ckOk('Ingredientes e bases identificados e no prazo'), ckOk('Gelo e pá disponíveis'), ckOk('Balança e instrumentos conferidos'),
+    ckOk('Espresso calibrado e perdas registradas'), ckOk('Receitas ativas e mise en place prontos'), ckOk('Pendências anteriores avaliadas (liberar ou registrar)') ] },
+  { id: 'bar_fechamento', setor: 'Bar', momento: 'Fechamento', codigo: 'BAR-15', titulo: 'Fechamento do posto', prazo: 'Após as 22h', items: [
+    ckOk('Pedidos finalizados'), ckOk('Sobras destinadas'), ckOk('Perdas registradas'), ckOk('Lotes identificados e armazenados'),
+    ckOk('Equipamentos limpos'), ckOk('Utensílios e superfícies higienizados'), ckOk('Resíduos retirados'),
+    ckNum('Temperatura da geladeira', '°C'), ckNum('Temperatura do freezer', '°C'), ckOk('Saneantes guardados'),
+    ckOk('Manutenção e reposição programadas'), ckOk('Equipamentos desligados conforme o manual'), ckOk('Conclusão e pendências para a abertura registradas') ] },
+  // Cozinha e Salão: do "Roteiro de abertura e fechamento — Balayó" (auxiliar de cozinha e atendentes)
+  { id: 'coz_abertura', setor: 'Cozinha', momento: 'Abertura', codigo: 'COZ-01', titulo: 'Abertura da cozinha', prazo: 'Chegada às 12h30 (proposta) · pronto até 13h45',
+    obs: 'Pendente para os donos: hora de chegada, limite de temperatura de cada geladeira e freezer, produto e forma de higienizar frutas e folhas.', items: [
+    ckSec('Antes de começar — higiene'),
+    ckOk('Uniforme limpo, trocado no local definido'), ckOk('Cabelo preso e protegido (touca ou rede)'), ckOk('Sem anéis, pulseiras, relógio, brincos grandes ou colares'),
+    ckOk('Unhas curtas, limpas e sem esmalte'), ckOk('Celular guardado fora da área de preparo'), ckOk('Mãos lavadas antes de começar'),
+    ckOk('Saúde ok (sem febre, diarreia, vômito, gripe forte ou ferida nas mãos/braços). Se tiver: avisar o responsável antes de começar'),
+    ckSec('1. Conferir o ambiente (10 min)'),
+    ckOk('Luzes, gás, água e energia funcionando'), ckOk('Pia de lavar as mãos com sabonete, papel toalha e lixeira'), ckOk('Bancadas, tábuas e utensílios limpos e guardados'),
+    ckOk('Sem sinal de baratas, ratos ou formigas (se houver: avisar o responsável antes de começar)'), ckOk('Lixeiras vazias, limpas e com saco novo'),
+    ckSec('2. Temperaturas (5 min) — anotar o número'),
+    ckNum('Geladeira 1', '°C'), ckNum('Geladeira 2', '°C'), ckNum('Freezer', '°C'),
+    ckOk('Se algum valor estiver fora do limite: não usar os produtos de dentro, avisar o responsável e registrar'),
+    ckSec('3. Estoque e validades (10 min)'),
+    ckOk('Etiquetas conferidas em tudo que está pronto ou aberto (preparos, molhos, recheios, caldas)'), ckOk('Produto sem etiqueta ou vencido separado e mostrado ao responsável (não usar)'),
+    ckOk('O que vence primeiro está na frente'), ckOk('Embalagens abertas com data de abertura'),
+    ckSec('4. Recebimento de mercadorias (só quando houver entrega)'),
+    ckOk('Nota conferida com o pedido'), ckOk('Embalagem íntegra, validade e aparência conferidas'), ckOk('Refrigerados e congelados guardados primeiro'),
+    ckOk('Problemas separados ou recusados e responsável avisado'), ckOk('Caixas de papelão retiradas antes da área de preparo, quando possível'),
+    ckSec('5. Produção do dia (app → Diário)'),
+    ckOk('Lista do dia conferida na aba Diário'), ckOk('Tudo pesado pela lista de pesagem do app (pesar, não "olhar")'), ckOk('Descongelamento só na geladeira'),
+    ckOk('Frutas, verduras e folhas higienizadas conforme o procedimento aprovado'), ckOk('Utensílios de cru e de pronto separados'),
+    ckOk('Tudo guardado etiquetado: nome, data de preparo, validade e quem fez'),
+    ckSec('6. Mise en place (até 13h45)'),
+    ckOk('Porções e insumos do cardápio separados e na geladeira'), ckOk('Panos, pegadores, espátulas e luvas limpos à mão'),
+    ckOk('Atendentes e barista avisados: o que falta hoje e alergênico novo (ex.: troca de marca)') ] },
+  { id: 'coz_servico', setor: 'Cozinha', momento: 'Durante o serviço', codigo: 'COZ-04', titulo: 'Cozinha durante o serviço', prazo: '14h às 22h', obs: '', items: [
+    ckOk('Tirar da geladeira só o necessário e devolver logo'), ckOk('Mãos lavadas entre tarefas'), ckOk('Mesma tábua ou faca nunca usada para cru e pronto sem lavar'),
+    ckOk('Bancada limpa enquanto trabalha (limpar à medida que suja)'), ckOk('Prato que voltou da mesa: não reaproveitado'),
+    ckOk('Pedido com restrição alimentar: confirmado com o atendente, ingredientes e utensílios conferidos, avisado se não for possível garantir'),
+    ckOk('Perdas anotadas (o que caiu, queimou ou foi descartado)') ] },
+  { id: 'coz_fechamento', setor: 'Cozinha', momento: 'Fechamento', codigo: 'COZ-02', titulo: 'Fechamento da cozinha', prazo: 'Após o último pedido (~22h)',
+    obs: 'Pendente para os donos: o que pode ser guardado de um dia para o outro e por quanto tempo; produtos de limpeza, diluição e tempo de contato (pelo rótulo).', items: [
+    ckSec('1. Alimentos (15 min)'),
+    ckOk('Sobras: regra dos donos seguida (descartar ou guardar com etiqueta). Na dúvida, não guardar'), ckOk('Tudo que foi guardado está tampado, etiquetado e na geladeira'),
+    ckOk('Nenhuma comida fora da refrigeração'), ckOk('Perdas do dia anotadas'),
+    ckSec('2. Limpeza (30–40 min)'),
+    ckOk('Equipamentos desligados e frios antes de limpar'), ckOk('Utensílios, tábuas, panelas e assadeiras lavados'), ckOk('Fogão, forno e chapa limpos conforme o manual'),
+    ckOk('Bancadas: tirar resíduos → lavar → enxaguar → desinfetar com o produto aprovado → secar'), ckOk('Puxadores das geladeiras limpos'), ckOk('Chão varrido e lavado'),
+    ckOk('Produtos de limpeza usados na diluição do rótulo, sem misturar'), ckOk('Panos e esponjas lavados para secar ou trocados'),
+    ckSec('3. Lixo e segurança (10 min)'),
+    ckOk('Lixo retirado e levado ao local de descarte'), ckOk('Lixeiras limpas, com saco novo e tampadas'),
+    ckNum('Temperatura final — Geladeira 1', '°C'), ckNum('Temperatura final — Geladeira 2', '°C'), ckNum('Temperatura final — Freezer', '°C'),
+    ckOk('Gás fechado; forno, fogão e chapa desligados'), ckOk('Torneiras fechadas e luzes apagadas'), ckOk('Produtos de limpeza guardados longe dos alimentos'),
+    ckSec('4. Para amanhã (5 min)'),
+    ckOk('O que está acabando anotado (lista de reposição)'), ckOk('Problemas de equipamento anotados'), ckOk('Recado deixado para quem abre') ] },
+  { id: 'sal_abertura', setor: 'Salão', momento: 'Abertura', codigo: 'SAL-01', titulo: 'Abertura do salão', prazo: 'Chegada às 13h15 (proposta) · porta aberta às 14h',
+    obs: 'Pendente para os donos: hora de chegada, valor do troco inicial, padrão de água servida e da jarra de 500 ml.', items: [
+    ckSec('Antes de começar — higiene'),
+    ckOk('Uniforme limpo, trocado no local definido'), ckOk('Cabelo preso'), ckOk('Sem anéis, pulseiras, relógio, brincos grandes ou colares'),
+    ckOk('Celular guardado fora da área de preparo'), ckOk('Mãos lavadas antes de começar'),
+    ckOk('Saúde ok (sem febre, diarreia, vômito, gripe forte ou ferida nas mãos/braços). Se tiver: avisar o responsável antes de começar'),
+    ckSec('1. Salão e áreas do cliente (20 min)'),
+    ckOk('Janelas e portas abertas; luz, som e ventilação/ar ligados'), ckOk('Mesas e cadeiras limpas e alinhadas'), ckOk('Chão varrido; varanda/área externa organizada'),
+    ckOk('Banheiro do cliente limpo, com sabonete, papel higiênico, papel toalha e lixeira'), ckOk('Plantas, decoração e iluminação do jeito definido pelos donos'),
+    ckSec('2. Mesa e serviço (15 min)'),
+    ckOk('Cardápios limpos e completos'), ckOk('Guardanapos, açúcar, adoçante e talheres repostos'),
+    ckOk('Xícaras, copos, pratos e jarras sem trincas ou lascas (peça danificada sai de uso)'), ckOk('Bandejas limpas'), ckOk('Água para servir pronta conforme o padrão da casa'),
+    ckSec('3. Caixa e pedidos (10 min)'),
+    ckOk('Maquininha ligada e testada'), ckNum('Troco inicial', 'R$'), ckOk('Sistema de pedidos ou bloco funcionando'),
+    ckSec('4. Briefing com cozinha e bar (5 min, às 13h50)'),
+    ckOk('Perguntado: o que está em falta hoje?'), ckOk('Perguntado: tem item novo ou com mudança de ingrediente?'),
+    ckOk('Combinado como avisar pedidos com restrição alimentar'), ckOk('Combinado o serviço da jarra de 500 ml: quantas xícaras e se leva leite à parte'),
+    ckSec('5. Porta aberta às 14h'),
+    ckOk('Postura, uniforme e mãos limpas'), ckOk('Salão pronto para receber') ] },
+  { id: 'sal_servico', setor: 'Salão', momento: 'Durante o serviço', codigo: 'SAL-04', titulo: 'Salão durante o serviço', prazo: '14h às 22h',
+    obs: 'Pendente para os donos: frequência de conferência do banheiro do cliente.', items: [
+    ckOk('Cliente recebido; cardápio explicado rápido se for a primeira vez'),
+    ckOk('Sei explicar: café com leite (coado com leite quente, sem espuma) × latte (espresso com leite vaporizado e espuma fina)'),
+    ckOk('Chocolate quente: dizer "sem adição de café", nunca "sem cafeína"'),
+    ckOk('Restrição ou alergia: anotar com as palavras do cliente, confirmar com cozinha ou bar e nunca prometer "não tem nada" sem conferir'),
+    ckOk('Jarra de 500 ml: levar com cuidado, avisar que está quente, entregar as xícaras certas'),
+    ckOk('Louça tirada das mesas assim que o cliente termina'), ckOk('Mesa limpa entre um cliente e outro'),
+    ckOk('Sobra que voltou da mesa (café, leite, comida): descartada, nunca devolvida'), ckOk('Mãos lavadas depois de recolher louça suja e antes de levar alimento'),
+    ckOk('Reclamação: ouvir, pedir desculpas, chamar o responsável se precisar e anotar'), ckOk('Banheiro do cliente conferido durante o turno') ] },
+  { id: 'sal_fechamento', setor: 'Salão', momento: 'Fechamento', codigo: 'SAL-02', titulo: 'Fechamento do salão', prazo: 'Após as 22h',
+    obs: 'Pendente para os donos: horário do último pedido da cozinha e do bar; onde guardar dinheiro e relatório.', items: [
+    ckSec('1. Últimos clientes (até 22h)'),
+    ckOk('Clientes avisados com educação do horário de fechamento da cozinha e do bar'), ckOk('Contas pendentes fechadas'),
+    ckSec('2. Salão (25 min)'),
+    ckOk('Toda a louça recolhida e levada para lavagem'), ckOk('Mesas, cadeiras e cardápios limpos'), ckOk('Açucareiros e itens de mesa recolhidos; o que acabou reposto'),
+    ckOk('Chão varrido e com pano passado'), ckOk('Banheiro do cliente limpo e reposto'), ckOk('Lixo do salão e do banheiro retirado'),
+    ckSec('3. Caixa (10 min)'),
+    ckOk('Maquininha fechada e relatório do dia tirado'), ckOk('Dinheiro contado e conferido com o relatório'), ckNum('Diferença no caixa (0 se bateu)', 'R$'),
+    ckOk('Diferença avisada ao dono, se houver'), ckOk('Dinheiro e relatório guardados no local combinado'),
+    ckSec('4. Segurança e recados (5 min)'),
+    ckOk('Som, luzes do salão e ventilação/ar desligados'), ckOk('Janelas e portas fechadas'), ckOk('O que acabou anotado (guardanapos, açúcar etc.)'),
+    ckOk('Louça quebrada, reclamações e problemas anotados'), ckOk('Recado deixado para quem abre amanhã') ] }
+];
+// Do roteiro: quando parar e chamar o responsável
+const CHAMAR_RESP = ['Geladeira ou freezer fora da temperatura', 'Produto vencido, sem etiqueta ou estragado', 'Sinal de pragas', 'Falta de água, gás ou energia',
+  'Equipamento que dá choque, vaza ou faz barulho estranho', 'Cliente que passou mal ou teve reação alérgica', 'Alguém da equipe machucado ou doente', 'Caixa que não fecha'];
+
 /* ================= ARMAZENAMENTO ================= */
 const LS_KEY = 'balayo_app_v1', LS_PROD = 'balayo_producao_v1', LS_UNLOCK = 'balayo_unlock_until', SS_ADMIN = 'balayo_admin_until', SS_TAB = 'balayo_tab';
 const UNLOCK_TTL = 12 * 3600e3, ADMIN_TTL = 30 * 60e3;
@@ -466,12 +609,24 @@ function seedDB() {
     config: clone(DEF_CONFIG),
     insumos: SEED_INS.map(([id, nome, cat, un, qtd, pesoUn]) => ({ id, nome, cat, un, qtd, pesoUn: pesoUn || 0, preco: 0, zero: id === 'agua', forn: '', obs: '' })),
     preparos: clone(SEED_PREP),
-    produtos: clone(SEED_PROD)
+    produtos: clone(SEED_PROD),
+    bebidas: clone(SEED_BEB),
+    checklists: clone(SEED_CHK)
   });
 }
 function normalize(db) {
   db.config = Object.assign(clone(DEF_CONFIG), db.config || {});
   db.config.custos = Object.assign(clone(DEF_CONFIG.custos), db.config.custos || {});
+  if (!Array.isArray(db.bebidas)) db.bebidas = clone(SEED_BEB);
+  if (!Array.isArray(db.checklists)) db.checklists = clone(SEED_CHK);
+  // Modelos novos entram; modelos que ainda estavam vazios recebem os itens padrão. Edições feitas pelos donos são mantidas.
+  SEED_CHK.forEach(s => {
+    const c = db.checklists.find(x => x.id === s.id);
+    if (!c) db.checklists.push(clone(s));
+    else if (!(c.items || []).length && s.items.length) Object.assign(c, clone(s));
+  });
+  const ordem = SEED_CHK.map(s => s.id);
+  db.checklists.sort((a, b) => (ordem.indexOf(a.id) + 1 || 999) - (ordem.indexOf(b.id) + 1 || 999));
   db.insumos = (db.insumos || []).map(i => Object.assign({ id: uid('i'), nome: '', cat: 'Outros', un: 'g', qtd: 1000, pesoUn: 0, preco: 0, zero: false, forn: '', obs: '' }, i));
   db.preparos = (db.preparos || []).map(p => Object.assign({ id: uid('p'), nome: '', un: 'g', perda: 0, itens: [], modo: '', est: 0, fonte: '' }, p));
   db.produtos = (db.produtos || []).map(p => Object.assign({ id: uid('x'), nome: '', cat: 'Outros', desc: '', itens: [], preco: 0, min: 0, emb: 0 }, p));
@@ -497,6 +652,8 @@ const UI = {
   dia: { cat: 'Todos', somar: false },
   preco: { sub: 'produtos', busca: '', soSemPreco: false },
   admin: { sub: 'menu' },
+  bar: { cat: 'Todos' },
+  chk: { setor: 'Bar' },
   voltar: 'prop'
 };
 
@@ -677,7 +834,8 @@ function showLock() {
   L.innerHTML = '<div class="lock-in">' + logoSVG(110) + '<div class="mt-4 flex flex-col items-center">' + wordmark(38) + '</div>' +
     '<p id="lockMsg" class="mt-7 font-bold text-[16px]" style="color:var(--txt-2)">Digite o PIN para entrar</p><div id="dots" class="dots"></div>' +
     '<div class="pad">' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => '<button data-k="' + n + '">' + n + '</button>').join('') +
-    '<button class="ghost" data-k="c" aria-label="Limpar">' + ic('x', 26, 2.4) + '</button><button data-k="0">0</button><button class="ghost" data-k="b" aria-label="Apagar">' + ic('del', 28, 2) + '</button></div></div>';
+    '<button class="ghost" data-k="c" aria-label="Limpar">' + ic('x', 26, 2.4) + '</button><button data-k="0">0</button><button class="ghost" data-k="b" aria-label="Apagar">' + ic('del', 28, 2) + '</button></div>' +
+    '<p class="text-[12.5px] text-center mt-6" style="color:var(--txt-2)">Os acessos e os checklists ficam registrados para os donos.</p></div>';
   L.classList.remove('hidden');
   drawDots();
 }
@@ -693,7 +851,7 @@ function pinKey(k) {
   if (pinBuf.length === (DB.config.pinLen || 4)) {
     if (hash(pinBuf) === DB.config.pinHash) {
       store.set(LS_UNLOCK, String(Date.now() + UNLOCK_TTL));
-      $('#lock').classList.add('hidden'); pinBuf = ''; render();
+      $('#lock').classList.add('hidden'); pinBuf = ''; render(); aposEntrar();
     } else {
       const d = $('#dots'); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake');
       $('#lockMsg').textContent = 'PIN incorreto. Tente de novo.';
@@ -732,14 +890,14 @@ function bannerSenha() {
 }
 
 /* ================= NAVEGAÇÃO ================= */
-const TITULOS = { prop: 'Proporções', cru: 'Cru × Cozido', dia: 'Produção diária', preco: 'Precificação', admin: 'Administração' };
+const TITULOS = { prop: 'Proporções', cru: 'Cru × Cozido', dia: 'Produção diária', preco: 'Precificação', bar: 'Receitas do bar', chk: 'Checklist', admin: 'Administração' };
 function montarCasca() {
   $('#hdr').innerHTML = '<span class="hdr-logo">' + logoSVG(38) + '</span>' +
     '<div class="flex-1 min-w-0 leading-tight"><div class="font-marca text-[23px]" style="letter-spacing:.04em">Balayó</div>' +
     '<div id="hdrTitle" class="lbl" style="font-size:11px;letter-spacing:.16em"></div></div>' +
     '<button id="btnAdmin" class="iconbtn" data-act="admin"></button>';
   $('#nav').innerHTML = '<div class="side-brand">' + logoSVG(64) + wordmark(24) + '</div><div class="nav-in">' +
-    [['prop', 'Proporções'], ['cru', 'Cru × Cozido'], ['dia', 'Diário'], ['preco', 'Preços']].map(([t, n]) =>
+    [['prop', 'Proporções'], ['cru', 'Cru × Cozido'], ['dia', 'Diário'], ['bar', 'Bar'], ['chk', 'Checklist'], ['preco', 'Preços']].map(([t, n]) =>
       '<button data-tab="' + t + '"><span class="navico">' + ic(t, 24, 2) + (t === 'preco' ? '<span id="navLock" class="navlock">' + ic('lock', 10, 3) + '</span>' : '') + '</span><span>' + n + '</span></button>').join('') + '</div>';
 }
 function go(tab) {
@@ -1152,11 +1310,18 @@ function vAdmin(m) {
   const S = UI.admin.sub, c = DB.config;
   if (S === 'produtos') return admProdutos(m);
   if (S === 'preparos') return admPreparos(m);
+  if (S === 'bar') return admBar(m);
+  if (S === 'chk') return admChk(m);
+  if (S === 'painel') return admPainel(m);
   const semPreco = DB.insumos.filter(insSemPreco).length;
   m.innerHTML = bannerSenha() +
-    '<section class="card" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Cardápio</div>' +
+    '<section class="card" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Equipe</div>' +
+    menuRow('admPainel', 'chk', 'Painel da equipe', 'acessos e checklists de cada pessoa') + '</section>' +
+    '<section class="card mt-4" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Cardápio</div>' +
     menuRow('admProd', 'dia', 'Produtos do cardápio', DB.produtos.length + ' itens · adicionar, editar, excluir') +
-    menuRow('admPrep', 'cru', 'Preparos e receitas base', DB.preparos.length + ' receitas · perda na cocção') + '</section>' +
+    menuRow('admPrep', 'cru', 'Preparos e receitas base', DB.preparos.length + ' receitas · perda na cocção') +
+    menuRow('admBar', 'bar', 'Receitas do bar', DB.bebidas.length + ' bebidas · ' + DB.bebidas.filter(b => b.status === 'teste').length + ' em teste') +
+    menuRow('admChk', 'chk', 'Checklists', DB.checklists.length + ' modelos · abertura e fechamento') + '</section>' +
     '<section class="card mt-4" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Preços</div>' +
     menuRow('goIns', 'preco', 'Insumos e valores de compra', semPreco ? semPreco + ' sem preço' : 'todos com preço') +
     menuRow('goCustos', 'gear', 'Custos da casa e percentuais', '') + '</section>' +
@@ -1382,8 +1547,356 @@ function importar(file) {
   };
   fr.readAsText(file);
 }
+/* ================= ABA BAR: RECEITAS ================= */
+function compQtd(c) { return c[1] ? c[1] + (c[2] ? ' ' + c[2] : '') : 'a definir'; }
+function bebResumo(b) { return b.comp.map(c => compQtd(c) + ' ' + c[0]).join(' + '); }
+const bebById = id => DB.bebidas.find(b => b.id === id);
+const bebCats = () => [...new Set(DB.bebidas.map(b => b.cat))];
+function badgeStatus(s) { return s === 'aprovada' ? '<span class="badge ok">aprovada</span>' : s === 'suspensa' ? '<span class="badge bad">suspensa</span>' : '<span class="badge warn">em teste</span>'; }
+const kpi3 = (t, v) => '<div class="kpi"><span>' + t + '</span><b style="font-size:14px;display:block;margin-top:4px">' + esc(v || '—') + '</b></div>';
+function bebCard(b) {
+  return '<button class="pr-row" data-act="barOpen" data-id="' + b.id + '"><div class="flex-1 min-w-0"><span class="lbl" style="font-size:10.5px">' + esc(b.cat) + '</span>' +
+    '<div class="font-extrabold text-[16px] leading-snug mt-1">' + esc(b.nome) + '</div><div class="text-[13px] mt-1" style="color:var(--txt-2)">' + esc(bebResumo(b)) + '</div></div>' + badgeStatus(b.status) + '</button>';
+}
+function vBar(m) {
+  const cats = ['Todos'].concat(bebCats());
+  if (!cats.includes(UI.bar.cat)) UI.bar.cat = 'Todos';
+  const lista = DB.bebidas.filter(b => UI.bar.cat === 'Todos' || b.cat === UI.bar.cat);
+  m.innerHTML = '<div class="hscroll">' + cats.map(c => '<button class="chip' + (UI.bar.cat === c ? ' on' : '') + '" data-act="barCat" data-v="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div>' +
+    '<p class="note mt-3">Receitas em teste: use para treinar e conferir. Quando a equipe aprovar, o gerente muda o status no Admin.</p>' +
+    '<div class="grid gap-3 mt-3 md:grid-cols-2">' + (lista.map(bebCard).join('') || '<div class="empty">Nenhuma receita nesta categoria.</div>') + '</div>';
+}
+function sheetBeb(id) {
+  const b = bebById(id); if (!b) return;
+  openSheet({
+    title: b.nome,
+    html: '<div class="flex flex-wrap gap-2 mb-3">' + badgeStatus(b.status) + '<span class="badge mute">' + esc(b.cat) + '</span></div>' +
+      (b.status !== 'aprovada' ? '<p class="note mb-3" style="color:var(--warn)"><b>EM TESTE</b>: medidas sujeitas a ajuste.</p>' : '') +
+      '<div class="lbl">Medidas</div><ul class="ul mt-1">' + b.comp.map(c => '<li class="li"><span>' + esc(c[0]) + '</span><b>' + (c[1] ? esc(compQtd(c)) : '<span class="warn">a definir</span>') + '</b></li>').join('') + '</ul>' +
+      '<div class="grid grid-cols-3 gap-2 mt-4">' + kpi3('Serviço', b.serv) + kpi3('Tempo', b.tempo) + kpi3('Temperatura', b.temp || 'a definir') + '</div>' +
+      '<div class="lbl mt-5">Modo de preparo</div>' + (b.modo ? '<p class="mt-2 leading-relaxed">' + esc(b.modo) + '</p>' : '<p class="note mt-2">Pendente. O gerente completa em Administração → Receitas do bar.</p>') +
+      (b.obs ? '<p class="note mt-3">' + esc(b.obs) + '</p>' : '') +
+      '<button class="btn btn-sec w-full mt-5" data-act="balcao">Modo balcão (letra grande)</button>',
+    onMount(api) { delegate(api.body, { balcao: () => api.body.classList.toggle('balcao') }); }
+  });
+}
+function admBar(m) {
+  m.innerHTML = '<button class="back" data-act="admMenu">' + ic('back', 20, 2.6) + ' Administração</button>' +
+    '<div class="flex items-center justify-between mt-1"><h2 class="h2">Receitas do bar</h2><button class="btn btn-pri" style="min-height:46px" data-act="bebNovo">' + ic('plus') + ' Nova</button></div>' +
+    '<p class="note mt-3">Edite as medidas quando souber os detalhes. Enquanto a receita estiver em teste, a tela do barista mostra EM TESTE.</p>' +
+    bebCats().map(cat => '<div class="lbl mt-5 mb-1 px-1">' + esc(cat) + '</div><div class="card" style="padding:4px 14px">' +
+      DB.bebidas.filter(b => b.cat === cat).map(b => '<button class="ins-row" data-act="bebEdit" data-id="' + b.id + '"><div class="flex-1 min-w-0"><div class="font-bold">' + esc(b.nome) + '</div><div class="text-[13px]" style="color:var(--txt-2)">' + esc(bebResumo(b)) + '</div></div>' + badgeStatus(b.status) + '</button>').join('') + '</div>').join('');
+}
+function sheetBebEdit(id) {
+  const orig = id ? bebById(id) : null;
+  const d = orig ? clone(orig) : { id: uid('b'), nome: '', cat: 'Cafés', comp: [['', '', '']], serv: '', tempo: '', temp: '', modo: '', obs: '', status: 'teste' };
+  const cats = [...new Set(['Cafés', 'Com leite', 'Gelados', 'Chocolates', 'Refrescantes', 'Chás e infusões', 'Para compartilhar'].concat(bebCats()))];
+  openSheet({
+    title: orig ? 'Editar receita' : 'Nova receita', html: '',
+    onMount(api) {
+      const B = api.body;
+      const draw = () => {
+        B.innerHTML = '<label class="fl">Nome<input class="inp" data-in="bt" data-k="nome" value="' + esc(d.nome) + '"></label>' +
+          '<label class="fl mt-3">Categoria<select class="inp" data-ch="bcat">' + cats.map(c => '<option' + (c === d.cat ? ' selected' : '') + '>' + esc(c) + '</option>').join('') + '</select></label>' +
+          '<div class="fl mt-3">Status<div class="seg mt-1">' + [['teste', 'Em teste'], ['aprovada', 'Aprovada'], ['suspensa', 'Suspensa']].map(([v, t]) => '<button class="' + (d.status === v ? 'on' : '') + '" data-act="bst" data-v="' + v + '">' + t + '</button>').join('') + '</div></div>' +
+          '<div class="lbl mt-5">Medidas (deixe em branco o que não souber)</div><div class="mt-2">' + d.comp.map((c, k) =>
+            '<div class="pline"><div class="flex gap-2"><input class="inp inp-sm flex-1" data-in="bc" data-k="' + k + '" data-f="0" value="' + esc(c[0]) + '" placeholder="Ingrediente">' +
+            '<button class="iconbtn sm" data-act="bcDel" data-k="' + k + '" aria-label="Remover">' + ic('x', 18, 2.4) + '</button></div>' +
+            '<div class="grid grid-cols-2 gap-2 mt-2"><input class="inp inp-sm" data-in="bc" data-k="' + k + '" data-f="1" value="' + esc(c[1]) + '" placeholder="Quantidade"><input class="inp inp-sm" data-in="bc" data-k="' + k + '" data-f="2" value="' + esc(c[2]) + '" placeholder="Unidade (g, ml, dose)"></div></div>').join('') + '</div>' +
+          '<button class="btn btn-sec w-full mt-2" data-act="bcAdd">' + ic('plus') + ' Adicionar medida</button>' +
+          '<label class="fl mt-4">Serviço (recipiente)<input class="inp inp-sm" data-in="bt" data-k="serv" value="' + esc(d.serv) + '"></label>' +
+          '<div class="grid grid-cols-2 gap-2 mt-3"><label class="fl">Tempo<input class="inp inp-sm" data-in="bt" data-k="tempo" value="' + esc(d.tempo) + '"></label>' +
+          '<label class="fl">Temperatura<input class="inp inp-sm" data-in="bt" data-k="temp" value="' + esc(d.temp) + '" placeholder="a definir"></label></div>' +
+          '<label class="fl mt-3">Modo de preparo<textarea class="inp" data-in="bt" data-k="modo" rows="4">' + esc(d.modo) + '</textarea></label>' +
+          '<label class="fl mt-3">Observações<textarea class="inp" data-in="bt" data-k="obs" rows="2">' + esc(d.obs) + '</textarea></label>' +
+          '<p id="beErr" class="err mt-2"></p><div class="flex gap-2 mt-3">' + (orig ? '<button class="btn btn-bad" data-act="bdel" aria-label="Excluir receita">' + ic('trash') + '</button>' : '') +
+          '<button class="btn btn-pri flex-1" data-act="bsave">' + ic('check') + ' Salvar</button></div>';
+      };
+      delegate(B, {
+        bst: el => { d.status = el.dataset.v; draw(); },
+        bcAdd: () => { d.comp.push(['', '', '']); draw(); },
+        bcDel: el => { d.comp.splice(+el.dataset.k, 1); draw(); },
+        bsave: () => {
+          if (!d.nome.trim()) { $('#beErr', B).textContent = 'Dê um nome à receita.'; return; }
+          d.nome = d.nome.trim();
+          d.comp = d.comp.filter(c => c[0].trim()).map(c => [c[0].trim(), (c[1] || '').trim(), (c[2] || '').trim()]);
+          if (orig) Object.assign(orig, d); else DB.bebidas.push(d);
+          save(); api.close(); toast('Receita salva'); render();
+        },
+        bdel: () => {
+          if (!confirm('Excluir "' + orig.nome + '"?')) return;
+          DB.bebidas = DB.bebidas.filter(b => b !== orig); save(); api.close(); render();
+        }
+      }, {
+        bt: el => { d[el.dataset.k] = el.value; },
+        bc: el => { d.comp[+el.dataset.k][+el.dataset.f] = el.value; }
+      }, {
+        bcat: el => { d.cat = el.value; }
+      });
+      draw();
+    }
+  });
+}
+
+/* ================= ABA CHECKLIST ================= */
+function chkStore(id) {
+  try { return Object.assign({ feitos: {}, vals: {}, concl: null }, JSON.parse(store.get('balayo_chk_' + hojeISO() + '_' + id) || 'null') || {}); }
+  catch (e) { return { feitos: {}, vals: {}, concl: null }; }
+}
+function chkPut(id, st) { store.set('balayo_chk_' + hojeISO() + '_' + id, JSON.stringify(st)); }
+const chkResp = () => store.get('balayo_chk_resp') || '';
+function chkCount(c, st) {
+  return c.items.reduce((n, it, i) => n + (it.tipo === 'sec' ? 0 : it.tipo === 'ok' ? (st.feitos[i] ? 1 : 0) : (String(st.vals[i] || '').trim() !== '' ? 1 : 0)), 0);
+}
+const chkTotal = c => c.items.filter(it => it.tipo !== 'sec').length;
+function vChk(m) {
+  const setores = ['Bar', 'Cozinha', 'Salão'];
+  const lista = DB.checklists.filter(c => c.setor === UI.chk.setor);
+  m.innerHTML = '<section class="card"><div class="lbl">Quem está preenchendo</div><input class="inp mt-2" data-in="chkResp" value="' + esc(chkResp()) + '" placeholder="Seu nome" aria-label="Seu nome">' +
+    '<p class="note mt-2">Fica salvo neste celular. Cada pessoa usa o próprio celular.</p></section>' +
+    '<div class="seg mt-4">' + setores.map(s => '<button class="' + (UI.chk.setor === s ? 'on' : '') + '" data-act="chkSetor" data-v="' + s + '">' + s + '</button>').join('') + '</div>' +
+    '<div class="grid gap-3 mt-4 md:grid-cols-2">' + lista.map(c => {
+      const st = chkStore(c.id), n = chkCount(c, st);
+      return '<button class="pr-row" data-act="chkOpen" data-id="' + c.id + '"><div class="flex-1 min-w-0"><span class="lbl" style="font-size:10.5px">' + esc(c.codigo) + ' · ' + esc(c.momento) + '</span>' +
+        '<div class="font-extrabold text-[16px] leading-snug mt-1">' + esc(c.titulo) + '</div><div class="text-[13px] mt-1" style="color:var(--txt-2)">' +
+        (c.prazo ? esc(c.prazo) + ' · ' : '') + (chkTotal(c) ? n + ' de ' + chkTotal(c) + ' itens' : 'modelo sem itens') + '</div></div>' +
+        (st.concl ? '<span class="badge ok">feito ' + esc(st.concl.hora) + '</span>' : '<span class="badge mute">pendente</span>') + '</button>';
+    }).join('') + '</div>' +
+    '<section class="card mt-5" style="background:#FBE7E4;border-color:#F3CFC9"><div class="lbl" style="color:var(--bad)">Pare e chame o responsável se</div><ul class="mt-2" style="padding-left:18px;list-style:disc;line-height:1.6">' +
+    CHAMAR_RESP.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul><p class="font-bold mt-2 text-[14px]">Não decida sozinho se algo pode ou não ser usado. Separe, avise e registre.</p></section>';
+}
+function sheetChk(id) {
+  const c = DB.checklists.find(x => x.id === id); if (!c) return;
+  openSheet({
+    title: c.codigo + ' · ' + c.titulo, html: '',
+    onMount(api) {
+      const B = api.body;
+      const draw = () => {
+        const st = chkStore(id), total = chkTotal(c), n = chkCount(c, st);
+        B.innerHTML = (c.prazo ? '<p class="note mb-2">' + esc(c.prazo) + '</p>' : '') +
+          (c.obs ? '<p class="note mb-3" style="background:#FFF7E8;color:#7A4E0E">' + esc(c.obs) + '</p>' : '') +
+          (!total ? '<p class="note">Modelo ainda sem itens. O gerente cadastra em Administração → Checklists.</p>' :
+            '<ul class="ul">' + c.items.map((it, i) => it.tipo === 'sec'
+              ? '<li class="lbl" style="padding:20px 0 4px">' + esc(it.t) + '</li>'
+              : it.tipo === 'ok'
+              ? '<li><button class="ins-row" data-act="chkTog" data-i="' + i + '"><span class="flex-1 font-bold" style="' + (st.feitos[i] ? 'opacity:.5' : '') + '">' + esc(it.t) + '</span><span class="chkbox' + (st.feitos[i] ? ' on' : '') + '">' + (st.feitos[i] ? ic('check', 18, 3) : '') + '</span></button></li>'
+              : '<li class="li" style="flex-direction:column;align-items:stretch"><span class="font-bold">' + esc(it.t) + '</span><div class="relative mt-2"><input class="inp inp-sm" inputmode="decimal" data-in="chkVal" data-i="' + i + '" value="' + esc(st.vals[i] || '') + '" placeholder="0" aria-label="' + esc(it.t) + '"><span class="suffix-sm">' + esc(it.un || '') + '</span></div></li>'
+            ).join('') + '</ul><p class="note mt-4">Feitos: ' + n + ' de ' + total + '</p>') +
+          (st.concl
+            ? '<div class="okline mt-3">' + ic('check', 18, 2.6) + ' Concluído às ' + esc(st.concl.hora) + ' por ' + esc(st.concl.resp) + '</div><button class="btn btn-out w-full mt-3" data-act="chkReopen">Reabrir checklist</button>'
+            : (total ? '<button class="btn btn-pri w-full mt-4" data-act="chkDone">' + ic('check') + ' Concluir checklist</button>' : ''));
+      };
+      delegate(B, {
+        chkTog: el => { const st = chkStore(id), i = +el.dataset.i; st.feitos[i] = !st.feitos[i]; chkPut(id, st); draw(); },
+        chkDone: () => {
+          const resp = chkResp(), st = chkStore(id), falta = chkTotal(c) - chkCount(c, st);
+          if (!resp) { toast('Digite seu nome na tela de Checklist antes de concluir'); return; }
+          if (falta > 0 && !confirm(falta + ' item(ns) sem marcar. Concluir mesmo assim?')) return;
+          st.concl = { hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), resp };
+          chkPut(id, st); draw();
+          const nums = c.items.map((it, i) => it.tipo === 'num' && String(st.vals[i] || '').trim() ? it.t + ': ' + String(st.vals[i]).trim() + (it.un ? ' ' + it.un : '') : '').filter(Boolean);
+          logEvento('checklist', c.codigo + ' ' + c.titulo + ' · ' + chkCount(c, st) + ' de ' + chkTotal(c) + ' itens' + (nums.length ? ' · ' + nums.join('; ') : ''), c.id);
+        },
+        chkReopen: () => { const st = chkStore(id); st.concl = null; chkPut(id, st); draw(); }
+      }, {
+        chkVal: el => { const st = chkStore(id); st.vals[+el.dataset.i] = el.value; chkPut(id, st); }
+      });
+      draw();
+    },
+    onClose() { if (UI.tab === 'chk') render(); }
+  });
+}
+function admChk(m) {
+  m.innerHTML = '<button class="back" data-act="admMenu">' + ic('back', 20, 2.6) + ' Administração</button><h2 class="h2 mt-1">Checklists</h2>' +
+    '<p class="note mt-3">Modelos prontos para cada setor. Edite os itens quando souber os detalhes. Os registros da equipe ficam em cada celular.</p>' +
+    ['Bar', 'Cozinha', 'Salão'].map(setor => '<div class="lbl mt-5 mb-1 px-1">' + setor + '</div><div class="card" style="padding:4px 14px">' +
+      DB.checklists.filter(c => c.setor === setor).map(c => '<button class="ins-row" data-act="chkEdit" data-id="' + c.id + '"><div class="flex-1 min-w-0"><div class="font-bold">' + esc(c.codigo) + ' · ' + esc(c.titulo) + '</div>' +
+        '<div class="text-[13px]" style="color:var(--txt-2)">' + esc(c.momento) + ' · ' + chkTotal(c) + ' itens</div></div>' + (chkTotal(c) ? '' : '<span class="badge warn">sem itens</span>') + ic('chev', 18, 2.4) + '</button>').join('') + '</div>').join('');
+}
+function sheetChkEdit(id) {
+  const c = DB.checklists.find(x => x.id === id); if (!c) return;
+  const d = { titulo: c.titulo, prazo: c.prazo, obs: c.obs || '', items: clone(c.items) };
+  openSheet({
+    title: 'Editar checklist', html: '',
+    onMount(api) {
+      const B = api.body;
+      const draw = () => {
+        B.innerHTML = '<label class="fl">Título<input class="inp" data-in="ct" data-k="titulo" value="' + esc(d.titulo) + '"></label>' +
+          '<label class="fl mt-3">Horário<input class="inp inp-sm" data-in="ct" data-k="prazo" value="' + esc(d.prazo) + '" placeholder="Ex.: Antes das 14h"></label>' +
+          '<label class="fl mt-3">Aviso / pendências (aparece no topo do checklist)<textarea class="inp" data-in="ct" data-k="obs" rows="2">' + esc(d.obs) + '</textarea></label>' +
+          '<div class="lbl mt-5">Itens</div><div class="mt-2">' + (d.items.length ? d.items.map((it, k) =>
+            '<div class="pline"><div class="flex gap-2"><input class="inp inp-sm flex-1" data-in="ci" data-k="' + k + '" data-f="t" value="' + esc(it.t) + '" placeholder="Texto do item">' +
+            '<button class="iconbtn sm" data-act="cidel" data-k="' + k + '" aria-label="Remover item">' + ic('x', 18, 2.4) + '</button></div>' +
+            '<div class="grid grid-cols-2 gap-2 mt-2"><select class="inp inp-sm" data-ch="ctipo" data-k="' + k + '"><option value="ok"' + (it.tipo === 'ok' ? ' selected' : '') + '>Marcar feito</option><option value="num"' + (it.tipo === 'num' ? ' selected' : '') + '>Anotar número</option><option value="sec"' + (it.tipo === 'sec' ? ' selected' : '') + '>Título de seção</option></select>' +
+            (it.tipo === 'num' ? '<input class="inp inp-sm" data-in="ci" data-k="' + k + '" data-f="un" value="' + esc(it.un || '') + '" placeholder="Unidade (ex.: °C)">' : '<span></span>') + '</div></div>').join('') :
+            '<p class="note">Sem itens. Adicione abaixo.</p>') + '</div>' +
+          '<div class="grid grid-cols-3 gap-2 mt-3"><button class="btn btn-sec" style="padding:0 8px" data-act="cadd">' + ic('plus', 18) + ' Marcar</button><button class="btn btn-sec" style="padding:0 8px" data-act="caddn">' + ic('plus', 18) + ' Número</button><button class="btn btn-sec" style="padding:0 8px" data-act="cadds">' + ic('plus', 18) + ' Seção</button></div>' +
+          '<p id="ceErr" class="err mt-2"></p><div class="flex gap-2 mt-4"><button class="btn btn-out" data-act="crest">Padrão original</button><button class="btn btn-pri flex-1" data-act="csave">' + ic('check') + ' Salvar</button></div>';
+      };
+      delegate(B, {
+        cadd: () => { d.items.push({ t: '', tipo: 'ok' }); draw(); },
+        caddn: () => { d.items.push({ t: '', tipo: 'num', un: '' }); draw(); },
+        cadds: () => { d.items.push({ t: '', tipo: 'sec' }); draw(); },
+        cidel: el => { d.items.splice(+el.dataset.k, 1); draw(); },
+        crest: () => {
+          if (!confirm('Voltar aos itens originais deste modelo?')) return;
+          const s = SEED_CHK.find(x => x.id === id); d.titulo = s.titulo; d.prazo = s.prazo; d.obs = s.obs || ''; d.items = clone(s.items); draw();
+        },
+        csave: () => {
+          if (!d.titulo.trim()) { $('#ceErr', B).textContent = 'Dê um título.'; return; }
+          const items = d.items.filter(it => it.t.trim()).map(it => it.tipo === 'num' ? { t: it.t.trim(), tipo: 'num', un: (it.un || '').trim() } : { t: it.t.trim(), tipo: it.tipo === 'sec' ? 'sec' : 'ok' });
+          Object.assign(c, { titulo: d.titulo.trim(), prazo: d.prazo.trim(), obs: d.obs.trim(), items });
+          save(); api.close(); toast('Checklist salvo'); render();
+        }
+      }, {
+        ct: el => { d[el.dataset.k] = el.value; },
+        ci: el => { d.items[+el.dataset.k][el.dataset.f] = el.value; }
+      }, {
+        ctipo: el => { const it = d.items[+el.dataset.k]; it.tipo = el.value; if (it.tipo === 'num') it.un = it.un || ''; else delete it.un; draw(); }
+      });
+      draw();
+    }
+  });
+}
+
+/* ================= REGISTROS (acessos e checklists) ================= */
+const LS_LOG = 'balayo_log';
+const logGet = () => { try { return JSON.parse(store.get(LS_LOG) || '[]'); } catch (e) { return []; } };
+const logSet = L => store.set(LS_LOG, JSON.stringify(L.slice(0, 300)));
+function aparelhoId() {
+  let id = store.get('balayo_aparelho');
+  if (!id) { id = Math.random().toString(36).slice(2, 8); store.set('balayo_aparelho', id); }
+  return id;
+}
+function aparelhoNome() {
+  const ua = navigator.userAgent;
+  return (/iPhone|iPad/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : 'Computador') + ' ' + aparelhoId().slice(0, 4).toUpperCase();
+}
+function logEvento(tipo, detalhe, ref) {
+  const d = new Date();
+  const L = logGet();
+  L.unshift({ id: aparelhoId() + '_' + d.getTime().toString(36) + Math.random().toString(36).slice(2, 5), tipo, nome: chkResp() || 'sem nome',
+    quando: d.toISOString(), dia: hojeISO(), aparelho: aparelhoNome(), detalhe: detalhe || '', ref: ref || '', env: false });
+  logSet(L);
+  enviarPendentes();
+}
+// Depois do PIN: pergunta o nome (uma vez por aparelho) e registra o acesso
+function aposEntrar() {
+  if (chkResp()) { logEvento('login', 'Entrou no app'); return; }
+  openSheet({
+    title: 'Quem está usando?',
+    html: '<p class="note">Digite seu nome. Ele aparece nos checklists e nos acessos, que ficam registrados para os donos.</p>' +
+      '<input class="inp mt-3" id="nmIn" placeholder="Seu nome" aria-label="Seu nome"><p id="nmErr" class="err mt-2"></p>' +
+      '<button class="btn btn-pri w-full mt-2" data-act="ok">Continuar</button>',
+    onMount(api) {
+      delegate(api.body, { ok: () => {
+        const v = $('#nmIn', api.body).value.trim();
+        if (!v) { $('#nmErr', api.body).textContent = 'Digite seu nome.'; return; }
+        store.set('balayo_chk_resp', v); api.close(); logEvento('login', 'Entrou no app');
+        if (UI.tab === 'chk') render();
+      } });
+      setTimeout(() => { const i = $('#nmIn', api.body); if (i) i.focus(); }, 320);
+    },
+    onClose() { if (!chkResp()) logEvento('login', 'Entrou no app (sem nome)'); }
+  });
+}
+
+/* ================= NUVEM: envio e leitura ================= */
+const nuvemCfg = () => (NUVEM_CONFIG && NUVEM_CONFIG.apiKey && NUVEM_CONFIG.projectId) ? NUVEM_CONFIG : null;
+let fbPromise = null;
+function nuvem() {
+  if (!nuvemCfg()) return Promise.reject(new Error('sem configuração'));
+  if (!fbPromise) {
+    const base = 'https://www.gstatic.com/firebasejs/' + FIREBASE_VER + '/';
+    fbPromise = Promise.all([import(base + 'firebase-app.js'), import(base + 'firebase-auth.js'), import(base + 'firebase-firestore.js')])
+      .then(([a, au, fs]) => { const app = a.initializeApp(nuvemCfg()); return { app, auth: au.getAuth(app), db: fs.getFirestore(app), au, fs }; })
+      .catch(e => { fbPromise = null; throw e; });
+  }
+  return fbPromise;
+}
+let enviando = false;
+async function enviarPendentes() {
+  if (enviando || !nuvemCfg() || !navigator.onLine) return;
+  if (!logGet().some(e => !e.env)) return;
+  enviando = true;
+  try {
+    const f = await nuvem();
+    await f.auth.authStateReady();
+    if (!f.auth.currentUser) await f.au.signInAnonymously(f.auth);
+    for (const e of logGet().filter(x => !x.env).reverse()) {
+      await f.fs.setDoc(f.fs.doc(f.db, 'eventos', e.id), { tipo: e.tipo, nome: e.nome, quando: e.quando, dia: e.dia, aparelho: e.aparelho, detalhe: e.detalhe, ref: e.ref, criado: f.fs.serverTimestamp() });
+      const L = logGet(); const x = L.find(y => y.id === e.id); if (x) { x.env = true; logSet(L); }
+    }
+  } catch (err) { console.warn('Envio dos registros falhou; tento de novo depois.', err); }
+  finally { enviando = false; }
+}
+function diaISO(offset) {
+  const d = new Date(); d.setDate(d.getDate() + offset);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+const horaDe = iso => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const diaTxt = dia => { const [y, mo, d] = dia.split('-'); return dia === hojeISO() ? 'Hoje' : dia === diaISO(-1) ? 'Ontem' : d + '/' + mo + '/' + y; };
+function listaEventos(evs) {
+  if (!evs.length) return '<div class="empty">Nenhum registro no período.</div>';
+  const dias = [...new Set(evs.map(e => e.dia))];
+  return dias.map(dia => '<div class="lbl mt-5 mb-1 px-1">' + esc(diaTxt(dia)) + '</div><div class="card" style="padding:4px 14px">' +
+    evs.filter(e => e.dia === dia).map(e => '<div class="ins-row" style="align-items:flex-start"><b class="shrink-0" style="width:48px">' + esc(horaDe(e.quando)) + '</b>' +
+      '<div class="flex-1 min-w-0"><div class="font-bold">' + esc(e.nome) + ' <em class="tag">' + (e.tipo === 'login' ? 'acesso' : 'checklist') + '</em></div>' +
+      '<div class="text-[13px] mt-0.5" style="color:var(--txt-2)">' + esc(e.detalhe) + '</div><div class="text-[12px]" style="color:#A8937D">' + esc(e.aparelho) + '</div></div></div>').join('') + '</div>').join('');
+}
+function admPainel(m) {
+  const P = UI.painel || (UI.painel = { periodo: 1 });
+  const head = '<button class="back" data-act="admMenu">' + ic('back', 20, 2.6) + ' Administração</button><h2 class="h2 mt-1">Painel da equipe</h2>' +
+    '<p class="note mt-3">Mostra quem entrou no app e quais checklists foram concluídos, com horário e aparelho. A equipe é avisada na tela de PIN.</p>';
+  if (!nuvemCfg()) {
+    m.innerHTML = head + '<section class="card mt-4" style="background:#FFF7E8;border-color:#F3DFB8"><div class="font-extrabold">Nuvem ainda não conectada</div>' +
+      '<p class="text-[14px] mt-1 leading-relaxed">Para ver os registros de <b>todos os celulares</b> aqui, conecte a nuvem gratuita (Firebase). O passo a passo está em <b>docs/NUVEM-PASSO-A-PASSO.md</b>. Até lá, abaixo aparecem só os registros <b>deste aparelho</b>.</p></section>' +
+      listaEventos(logGet());
+    return;
+  }
+  m.innerHTML = head + '<div id="pnBody" class="mt-4"><div class="empty">Carregando…</div></div>';
+  painelAsync(P);
+}
+async function painelAsync(P) {
+  const el = $('#pnBody'); if (!el) return;
+  let f;
+  try { f = await nuvem(); await f.auth.authStateReady(); }
+  catch (e) { el.innerHTML = '<div class="warnline">Não consegui carregar a nuvem. Confira a internet e toque em Atualizar.</div><button class="btn btn-sec w-full mt-3" data-act="pnAtualizar">Atualizar</button>'; return; }
+  const u = f.auth.currentUser;
+  if (!u || u.isAnonymous) {
+    el.innerHTML = '<section class="card"><div class="lbl">Entrar como dono</div><p class="note mt-2">Use o e-mail e a senha de dono cadastrados no Firebase.</p>' +
+      '<input class="inp mt-3" id="pnEmail" type="email" autocomplete="username" placeholder="E-mail" aria-label="E-mail">' +
+      '<input class="inp mt-2" id="pnSenha" type="password" autocomplete="current-password" placeholder="Senha" aria-label="Senha">' +
+      '<p id="pnErr" class="err mt-2"></p><button class="btn btn-pri w-full mt-2" data-act="pnEntrar">Entrar</button></section>';
+    return;
+  }
+  el.innerHTML = '<div class="empty">Buscando registros…</div>';
+  try {
+    const q = f.fs.query(f.fs.collection(f.db, 'eventos'), f.fs.where('dia', '>=', diaISO(-(P.periodo - 1))), f.fs.orderBy('dia', 'desc'), f.fs.limit(500));
+    const evs = (await f.fs.getDocs(q)).docs.map(d => d.data()).sort((a, b) => b.quando.localeCompare(a.quando));
+    const hoje = hojeISO(), evHoje = evs.filter(e => e.dia === hoje);
+    const modelos = DB.checklists.filter(c => chkTotal(c));
+    const feitos = modelos.filter(c => evHoje.some(e => e.tipo === 'checklist' && e.ref === c.id)).length;
+    const pend = logGet().filter(e => !e.env).length;
+    el.innerHTML = '<div class="seg">' + [[1, 'Hoje'], [7, '7 dias'], [30, '30 dias']].map(([v, t]) => '<button class="' + (P.periodo === v ? 'on' : '') + '" data-act="pnPeriodo" data-v="' + v + '">' + t + '</button>').join('') + '</div>' +
+      '<div class="kpis mt-4"><div class="kpi"><b>' + evHoje.filter(e => e.tipo === 'login').length + '</b><span>Acessos hoje</span></div>' +
+      '<div class="kpi ' + (feitos === modelos.length ? 'ok' : 'warn') + '"><b>' + feitos + '/' + modelos.length + '</b><span>Checklists hoje</span></div>' +
+      '<div class="kpi"><b>' + new Set(evHoje.map(e => e.nome)).size + '</b><span>Pessoas hoje</span></div></div>' +
+      '<section class="card mt-4" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Checklists de hoje</div>' +
+      DB.checklists.map(c => { const e = evHoje.find(x => x.tipo === 'checklist' && x.ref === c.id);
+        return '<div class="ins-row"><div class="flex-1 min-w-0"><div class="font-bold">' + esc(c.codigo) + ' · ' + esc(c.titulo) + '</div><div class="text-[13px]" style="color:var(--txt-2)">' + esc(c.setor) + '</div></div>' +
+          (!chkTotal(c) ? '<span class="badge mute">sem itens</span>' : e ? '<span class="badge ok">' + esc(horaDe(e.quando)) + ' · ' + esc(e.nome) + '</span>' : '<span class="badge warn">pendente</span>') + '</div>'; }).join('') + '</section>' +
+      '<div class="lbl mt-6 px-1">Registros do período</div>' + listaEventos(evs) +
+      (pend ? '<p class="note mt-4">Este aparelho tem ' + pend + ' registro(s) aguardando internet para enviar.</p>' : '') +
+      '<div class="grid grid-cols-2 gap-2 mt-4"><button class="btn btn-sec" data-act="pnAtualizar">Atualizar</button><button class="btn btn-out" data-act="pnSair">Sair (' + esc(u.email || 'dono') + ')</button></div>';
+  } catch (e) {
+    el.innerHTML = '<div class="warnline">' + (e.code === 'permission-denied' ? 'Este e-mail não tem permissão para ver o painel. Confira as regras do Firestore.' : 'Não consegui buscar os registros. Confira a internet.') + '</div>' +
+      '<div class="grid grid-cols-2 gap-2 mt-3"><button class="btn btn-sec" data-act="pnAtualizar">Atualizar</button><button class="btn btn-out" data-act="pnSair">Sair</button></div>';
+  }
+}
+
 /* ================= AÇÕES DA TELA PRINCIPAL ================= */
-const VIEWS = { prop: vProp, cru: vCru, dia: vDia, preco: vPreco, admin: vAdmin };
+const VIEWS = { prop: vProp, cru: vCru, dia: vDia, bar: vBar, chk: vChk, preco: vPreco, admin: vAdmin };
 const abrirAdmin = then => {
   if (UI.tab !== 'admin') UI.voltar = UI.tab;
   const fn = () => { UI.admin.sub = 'menu'; go('admin'); if (then) then(); };
@@ -1464,6 +1977,30 @@ const CH = {
   bkFile: el => { if (el.files && el.files[0]) importar(el.files[0]); el.value = ''; }
 };
 
+Object.assign(ACT, {
+  barCat: el => { UI.bar.cat = el.dataset.v; render(); },
+  barOpen: el => sheetBeb(el.dataset.id),
+  bebNovo: () => sheetBebEdit(null),
+  bebEdit: el => sheetBebEdit(el.dataset.id),
+  chkSetor: el => { UI.chk.setor = el.dataset.v; render(); },
+  chkOpen: el => sheetChk(el.dataset.id),
+  chkEdit: el => sheetChkEdit(el.dataset.id),
+  admBar: () => { UI.admin.sub = 'bar'; render(); window.scrollTo(0, 0); },
+  admChk: () => { UI.admin.sub = 'chk'; render(); window.scrollTo(0, 0); },
+  admPainel: () => { UI.admin.sub = 'painel'; render(); window.scrollTo(0, 0); },
+  pnPeriodo: el => { UI.painel.periodo = +el.dataset.v; render(); },
+  pnAtualizar: () => render(),
+  pnSair: async () => { try { const f = await nuvem(); await f.au.signOut(f.auth); } catch (e) {} render(); },
+  pnEntrar: async () => {
+    const email = $('#pnEmail').value.trim(), senha = $('#pnSenha').value, err = $('#pnErr');
+    if (!email || !senha) { err.textContent = 'Preencha e-mail e senha.'; return; }
+    err.textContent = 'Entrando…';
+    try { const f = await nuvem(); await f.au.signInWithEmailAndPassword(f.auth, email, senha); render(); }
+    catch (e) { err.textContent = /invalid|wrong|not-found|credential/.test(e.code || '') ? 'E-mail ou senha incorretos.' : 'Não consegui entrar. Confira a internet.'; }
+  }
+});
+Object.assign(IN, { chkResp: el => store.set('balayo_chk_resp', el.value) });
+
 /* ================= INÍCIO ================= */
 montarCasca();
 delegate(document.querySelector('.hdr'), ACT);
@@ -1476,10 +2013,12 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && needsUnlock() && $('#lock').classList.contains('hidden')) showLock(); });
 
-const tabSalva = store.get(SS_TAB, true), tabHash = (location.hash.match(/^#(prop|cru|dia|preco)$/) || [])[1];
+const tabSalva = store.get(SS_TAB, true), tabHash = (location.hash.match(/^#(prop|cru|dia|bar|chk|preco)$/) || [])[1];
 UI.tab = tabHash || (VIEWS[tabSalva] && tabSalva !== 'admin' ? tabSalva : 'prop');
 render();
 if (needsUnlock()) showLock();
+window.addEventListener('online', enviarPendentes);
+setTimeout(enviarPendentes, 3000);
 
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

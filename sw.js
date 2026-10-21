@@ -1,5 +1,5 @@
 // Faz o app abrir mesmo sem internet (depois do primeiro acesso)
-const CACHE = 'balayo-v1';
+const CACHE = 'balayo-v2';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
@@ -11,6 +11,8 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
+  // Nuvem (login e banco de dados): sempre direto pela internet, nunca do cache
+  if (/googleapis\.com$|firebaseio\.com$|firebaseapp\.com$/.test(new URL(req.url).hostname)) return;
   // Página: busca a versão nova na internet; sem internet, usa a guardada
   if (req.mode === 'navigate') {
     e.respondWith(fetch(req).then(res => {
