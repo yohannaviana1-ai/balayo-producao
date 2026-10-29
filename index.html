@@ -166,7 +166,7 @@ details.prep .ul{margin:0 0 10px 4px;padding-left:12px;border-left:3px solid var
 .balcao p,.balcao .li b,.balcao .ins-row span{font-size:19px}
 .balcao .li span{font-size:18px}
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(255,255,255,.97);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--linha);padding:8px 10px calc(8px + env(safe-area-inset-bottom))}
-.nav-in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.nav-in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:60px;border-radius:18px;font-size:10.5px;letter-spacing:-.01em;font-weight:800;color:#9A836B;transition:background-color .15s,color .15s,transform .09s}
 .nav button:active{transform:scale(.94)}
 .nav button.on{background:var(--cafe);color:#fff}
@@ -232,9 +232,11 @@ details.prep .ul{margin:0 0 10px 4px;padding-left:12px;border-left:3px solid var
 <div id="lock" class="lock hidden" role="dialog" aria-label="Desbloquear app"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <noscript><p style="padding:24px">Ative o JavaScript para usar o app.</p></noscript>
+<script src="calculos.js?v=4"></script>
 <script>
 (function () {
 'use strict';
+const Calc = window.BalayoCalc;
 /* ================= NUVEM (Firebase) =================
    Configuração do projeto Firebase (veja docs/NUVEM-PASSO-A-PASSO.md).
    Enquanto estiver vazia, o Painel da equipe mostra só os registros deste aparelho.
@@ -599,6 +601,46 @@ const SEED_CHK = [
 const CHAMAR_RESP = ['Geladeira ou freezer fora da temperatura', 'Produto vencido, sem etiqueta ou estragado', 'Sinal de pragas', 'Falta de água, gás ou energia',
   'Equipamento que dá choque, vaza ou faz barulho estranho', 'Cliente que passou mal ou teve reação alérgica', 'Alguém da equipe machucado ou doente', 'Caixa que não fecha'];
 
+/* ================= FICHAS TÉCNICAS E EMBALAGENS (dados iniciais) =================
+   Regra: nada de rendimento inventado. Rendimento vazio = "não calibrado". */
+const SEED_EMB = [
+  { id: 'e_pudim120', nome: 'Pote de pudim 120 ml', formato: 'Pote / forma individual', dim: '', cap: 120, obs: 'A capacidade não é o peso do pudim: o rendimento vem da calibração.' },
+  { id: 'e_cheese8x5', nome: 'Forma de cheesecake 8 × 5 cm', formato: 'Forma individual', dim: '8 × 5 cm', cap: null, obs: 'Confirmar: 8 cm é o diâmetro e 5 cm a altura?' },
+  { id: 'e_brownie30', nome: 'Assadeira de brownie 30 × 30 cm', formato: 'Assadeira quadrada', dim: '30 × 30 cm', cap: null, obs: 'Altura da assadeira e tamanho do corte a definir.' }
+];
+const SEED_FICHAS = [
+  { id: 'f_pudim', nome: 'Pudim tradicional', cat: 'Doces', status: 'teste',
+    componentes: [
+      { nome: 'Creme', tipo: 'itens', itens: [
+        { i: 'leite', q: 620, u: 'g' }, { i: 'ovos', q: 4, u: 'un' }, { i: 'gema', q: 75, u: 'g' },
+        { i: 'baunilha', q: 5, u: 'g' }, { i: 'creme_fresco', q: 160, u: 'g' }, { i: 'leite_cond', q: 395, u: 'g' } ] },
+      { nome: 'Calda', opcional: true, tipo: 'preparo', p: 'calda_caramelo', fator: 1 } ],
+    rendimentos: [{ emb: 'e_pudim120', unidades: null, teste: null, porUnidade: {}, obs: '' }],
+    pesoPronto: null, modo: '',
+    obs: 'A calda usa a receita "Calda de caramelo" já cadastrada, que é estimada. Confirme a calda da sua receita. Leite, baunilha e creme de leite estão em gramas na receita e em ml na compra: cadastre a densidade para o custo sair certo.' },
+  { id: 'f_cheesecake_fv', nome: 'Cheesecake de frutas vermelhas', cat: 'Doces', status: 'teste', pendente: true,
+    componentes: [{ nome: 'Base', tipo: 'itens', itens: [] }, { nome: 'Recheio', tipo: 'itens', itens: [] }, { nome: 'Calda', opcional: true, tipo: 'itens', itens: [] }],
+    rendimentos: [{ emb: 'e_cheese8x5', unidades: null, teste: null, porUnidade: {}, obs: '' }], pesoPronto: null, modo: '', obs: 'Aguardando a receita base.' },
+  { id: 'f_brownie', nome: 'Brownie', cat: 'Doces', status: 'teste', pendente: true,
+    componentes: [{ nome: 'Massa', tipo: 'itens', itens: [] }, { nome: 'Calda', opcional: true, tipo: 'itens', itens: [] }, { nome: 'Farofa', opcional: true, tipo: 'itens', itens: [] }],
+    rendimentos: [{ emb: 'e_brownie30', unidades: null, teste: null, porUnidade: {}, obs: '' }], pesoPronto: null, modo: '', obs: 'Aguardando a receita base.' }
+];
+const SEED_NOVOS_INS = [
+  { id: 'gema', nome: 'Gema de ovo', cat: 'Laticínios e frios', un: 'g', qtd: 1000, pesoUn: 0, preco: 0, zero: false, forn: '', obs: 'Separada dos ovos. Para o custo, cadastre o valor equivalente.' }
+];
+const SEED_NOVOS_PREP = [
+  { id: 'caramelo_salgado', nome: 'Calda de caramelo salgado francês', un: 'g', perda: null, itens: [], modo: '', est: 0, fonte: '', pendente: true }
+];
+// Lista de componentes para escolher nas fichas. O dono pode criar, renomear e excluir (Admin → Componentes).
+const AREAS_COMP = ['Confeitaria', 'Salgados', 'Sanduíches', 'Bebidas', 'Outras'];
+const SEED_COMP = [
+  ['Confeitaria', ['Massa', 'Recheio', 'Calda', 'Cobertura', 'Base', 'Decoração']],
+  ['Salgados', ['Massa', 'Recheio', 'Empanamento', 'Finalização']],
+  ['Sanduíches', ['Pão', 'Proteína', 'Queijo', 'Molho', 'Complementos']],
+  ['Bebidas', ['Base', 'Leite', 'Xarope', 'Finalização']]
+].reduce((lista, [area, nomes]) => lista.concat(nomes.map(nome => ({ id: 'k_' + norm(area).slice(0, 4) + '_' + norm(nome).replace(/[^a-z]/g, ''), nome, area }))), []);
+const SEMENTES_NOVAS = { insumos: SEED_NOVOS_INS, preparos: SEED_NOVOS_PREP, fichas: SEED_FICHAS, embalagens: SEED_EMB, componentesCat: SEED_COMP };
+
 /* ================= ARMAZENAMENTO ================= */
 const LS_KEY = 'balayo_app_v1', LS_PROD = 'balayo_producao_v1', LS_UNLOCK = 'balayo_unlock_until', SS_ADMIN = 'balayo_admin_until', SS_TAB = 'balayo_tab';
 const UNLOCK_TTL = 12 * 3600e3, ADMIN_TTL = 30 * 60e3;
@@ -627,7 +669,13 @@ function normalize(db) {
   });
   const ordem = SEED_CHK.map(s => s.id);
   db.checklists.sort((a, b) => (ordem.indexOf(a.id) + 1 || 999) - (ordem.indexOf(b.id) + 1 || 999));
-  db.insumos = (db.insumos || []).map(i => Object.assign({ id: uid('i'), nome: '', cat: 'Outros', un: 'g', qtd: 1000, pesoUn: 0, preco: 0, zero: false, forn: '', obs: '' }, i));
+  Calc.migrar(db, SEMENTES_NOVAS);
+  db.fichas = db.fichas.map(f => Object.assign({ id: uid('f'), nome: '', cat: 'Doces', status: 'teste', componentes: [], rendimentos: [], pesoPronto: null, modo: '', obs: '' }, f));
+  db.embalagens = db.embalagens.map(e => Object.assign({ id: uid('e'), nome: '', formato: '', dim: '', cap: null, obs: '' }, e));
+  db.componentesCat = db.componentesCat.map(k => Object.assign({ id: uid('k'), nome: '', area: 'Outras' }, k));
+  db.insumos = (db.insumos || []).map(i => Object.assign({ id: uid('i'), nome: '', cat: 'Outros', un: 'g', qtd: 1000, pesoUn: 0, pesoUnConf: false, dens: 0, preco: 0, zero: false, forn: '', obs: '' }, i));
+  // Água: 1 ml pesa 1 g (dado físico, não estimativa). Só preenche se estiver vazio.
+  db.insumos.forEach(i => { if (i.id === 'agua' && !(i.dens > 0)) i.dens = 1; });
   db.preparos = (db.preparos || []).map(p => Object.assign({ id: uid('p'), nome: '', un: 'g', perda: 0, itens: [], modo: '', est: 0, fonte: '' }, p));
   db.produtos = (db.produtos || []).map(p => Object.assign({ id: uid('x'), nome: '', cat: 'Outros', desc: '', itens: [], preco: 0, min: 0, emb: 0 }, p));
   return db;
@@ -646,22 +694,25 @@ const saveProd = () => store.set(LS_PROD, JSON.stringify(PROD));
 let DB = loadDB();
 let PROD = loadProd();
 const UI = {
-  tab: 'prop',
+  tab: 'dia',
+  rec: { ref: 'f:f_pudim', emb: '', modo: 'mult', mult: 1, qtd: '', excl: [] },
   prop: { total: 2000, pcts: clone(DB.config.props) },
   cru: { prep: 'brigadeiro', alvo: 800, livre: { cru: '', pronto: '', perda: '40', alvo: '' } },
-  dia: { cat: 'Todos', somar: false },
+  dia: { cat: 'Todos', somar: false, modo: 'rec' },
   preco: { sub: 'produtos', busca: '', soSemPreco: false },
   admin: { sub: 'menu' },
   bar: { cat: 'Todos' },
   chk: { setor: 'Bar' },
-  voltar: 'prop'
+  voltar: 'dia'
 };
 
 /* ================= CÁLCULOS ================= */
 const insById = id => DB.insumos.find(x => x.id === id);
 const prepById = id => DB.preparos.find(x => x.id === id);
 const prodById = id => DB.produtos.find(x => x.id === id);
-const refObj = r => r && r[0] === 'p' ? { t: 'p', o: prepById(r.slice(2)) } : { t: 'i', o: insById(String(r || '').slice(2)) };
+const fichaById = id => DB.fichas.find(x => x.id === id);
+const embById = id => DB.embalagens.find(x => x.id === id);
+const refObj = r => r && r[0] === 'p' ? { t: 'p', o: prepById(r.slice(2)) } : r && r[0] === 'f' ? { t: 'f', o: fichaById(r.slice(2)) } : { t: 'i', o: insById(String(r || '').slice(2)) };
 const insCusto = i => (!i || i.zero || !(i.qtd > 0)) ? 0 : (i.preco || 0) / i.qtd;
 const insSemPreco = i => !!i && !i.zero && !(i.preco > 0);
 const insPeso = (i, q) => i.un === 'un' ? q * (i.pesoUn || 0) : q;
@@ -686,6 +737,11 @@ function prepStats(p) {
 function linha(l) {
   const { t, o } = refObj(l.r);
   if (!o) return { ok: false, nome: '(item removido)', un: 'g', custo: 0, falta: [] };
+  if (t === 'f') {
+    const e = embById(l.emb), cu = Calc.custoPorUnidade(DB, o, l.emb);
+    return { ok: true, ficha: true, o, nome: o.nome + (e ? ' (' + e.nome + ')' : ''), un: 'un', custo: cu.ok ? l.q * cu.valor : 0,
+      falta: cu.ok ? cu.pendentes : ['rendimento não calibrado de ' + o.nome] };
+  }
   if (t === 'p') {
     const st = prepStats(o);
     return { ok: true, prep: true, o, st, nome: o.nome, un: o.un, base: l.cru ? st.cru : st.pronto, custo: l.q * (l.cru ? st.porCru : st.porPronto), falta: st.falta };
@@ -731,10 +787,14 @@ function precificar(p) {
 function cmvTom(cmv) { const m = DB.config.custos.cmvMeta || 30; return cmv <= m ? 'ok' : cmv <= m + 8 ? 'warn' : 'bad'; }
 // Soma a produção do dia
 function calcProducao() {
-  const comp = new Map();
+  const comp = new Map(), fich = new Map();
   for (const x of PROD.itens) {
     const p = prodById(x.id); if (!p) continue;
     for (const l of p.itens) {
+      if (l.r[0] === 'f') {
+        const k = l.r + '|' + (l.emb || ''), cur = fich.get(k) || { r: l.r, emb: l.emb || '', q: 0 };
+        cur.q += l.q * x.q; fich.set(k, cur); continue;
+      }
       const key = l.r + (l.r[0] === 'p' ? (l.cru ? '|cru' : '|pronto') : '');
       const cur = comp.get(key) || { r: l.r, cru: !!l.cru, q: 0 };
       cur.q += l.q * x.q; comp.set(key, cur);
@@ -750,8 +810,20 @@ function calcProducao() {
   const add = (ins, q) => tot.set(ins.id, { ins, q: ((tot.get(ins.id) || {}).q || 0) + q });
   linhas.filter(c => !c.info.prep).forEach(c => add(c.info.o, c.q));
   preps.forEach(p => p.itens.forEach(x => add(x.ins, x.q)));
+  // Produtos ligados a fichas técnicas: multiplica a ficha pelo rendimento calibrado da embalagem
+  const fichas = [...fich.values()].map(c => {
+    const f = fichaById(c.r.slice(2)); if (!f) return null;
+    const m = Calc.multPorUnidades(f, c.emb, c.q);
+    return { f, emb: embById(c.emb), q: c.q, ok: m.ok, motivo: m.motivo, grupos: m.ok ? Calc.expandirFicha(DB, f, m.mult).filter(g => g.incluido) : [] };
+  }).filter(Boolean);
+  const naoSomados = [];
+  fichas.forEach(fx => fx.grupos.forEach(g => g.linhas.forEach(l => {
+    if (!l.ins) return;
+    const qc = Calc.naUnidadeDeCompra(l.ins, l.q, l.u);
+    if (qc === null) naoSomados.push({ nome: l.nome, q: l.q, u: l.u, de: fx.f.nome }); else add(l.ins, qc);
+  })));
   const totais = [...tot.values()].sort((a, b) => a.ins.nome.localeCompare(b.ins.nome, 'pt-BR'));
-  return { linhas, preps, totais };
+  return { linhas, preps, totais, fichas, naoSomados };
 }
 const qtdProd = id => { const x = PROD.itens.find(y => y.id === id); return x ? x.q : 0; };
 function setQtdProd(id, q) {
@@ -765,9 +837,11 @@ const catsProdutos = () => [...new Set(DB.produtos.map(p => p.cat))];
 const catsInsumos = () => [...new Set(['Laticínios e frios', 'Proteínas', 'Hortifruti', 'Secos e despensa', 'Prontos de fornecedor'].concat(DB.insumos.map(i => i.cat)))];
 function usosInsumo(id) {
   return DB.produtos.filter(p => p.itens.some(l => l.r === 'i:' + id)).map(p => p.nome)
-    .concat(DB.preparos.filter(p => p.itens.some(x => x.i === id)).map(p => p.nome + ' (preparo)'));
+    .concat(DB.preparos.filter(p => p.itens.some(x => x.i === id)).map(p => p.nome + ' (preparo)'))
+    .concat(DB.fichas.filter(f => f.componentes.some(c => c.tipo !== 'preparo' && (c.itens || []).some(it => it.i === id))).map(f => f.nome + ' (ficha técnica)'));
 }
-const usosPreparo = id => DB.produtos.filter(p => p.itens.some(l => l.r === 'p:' + id)).map(p => p.nome);
+const usosPreparo = id => DB.produtos.filter(p => p.itens.some(l => l.r === 'p:' + id)).map(p => p.nome)
+  .concat(DB.fichas.filter(f => f.componentes.some(c => c.tipo === 'preparo' && c.p === id)).map(f => f.nome + ' (ficha técnica)'));
 
 /* ================= INTERFACE: BASE ================= */
 let toastT;
@@ -897,7 +971,7 @@ function montarCasca() {
     '<div id="hdrTitle" class="lbl" style="font-size:11px;letter-spacing:.16em"></div></div>' +
     '<button id="btnAdmin" class="iconbtn" data-act="admin"></button>';
   $('#nav').innerHTML = '<div class="side-brand">' + logoSVG(64) + wordmark(24) + '</div><div class="nav-in">' +
-    [['prop', 'Proporções'], ['cru', 'Cru × Cozido'], ['dia', 'Diário'], ['bar', 'Bar'], ['chk', 'Checklist'], ['preco', 'Preços']].map(([t, n]) =>
+    [['dia', 'Diário'], ['bar', 'Bar'], ['chk', 'Checklist'], ['preco', 'Preços']].map(([t, n]) =>
       '<button data-tab="' + t + '"><span class="navico">' + ic(t, 24, 2) + (t === 'preco' ? '<span id="navLock" class="navlock">' + ic('lock', 10, 3) + '</span>' : '') + '</span><span>' + n + '</span></button>').join('') + '</div>';
 }
 function go(tab) {
@@ -1014,11 +1088,126 @@ function textoCru() {
   return '*Balayó — ' + p.nome + '*\nPreciso pronto: ' + fq(UI.cru.alvo, p.un) + ' (perde ' + nf(p.perda, 1) + '%)\nFazer ' + nf(f * 100, 0) + '% da receita base · ' + fq(st.cru * f, p.un) + ' cru\n\n' +
     p.itens.map(x => { const i = insById(x.i); return i ? '• ' + i.nome + ': ' + fq(x.q * f, i.un) : ''; }).filter(Boolean).join('\n');
 }
-/* ================= ABA 3: BALAYÓ DIÁRIO ================= */
+/* ================= ABA DIÁRIO ================= */
 function vDia(m) {
+  m.innerHTML = bannerSenha() + '<div class="seg">' + [['rec', 'Calcular receita'], ['card', 'Lista do cardápio']].map(([k, t]) =>
+    '<button class="' + (UI.dia.modo === k ? 'on' : '') + '" data-act="diaModo" data-v="' + k + '">' + t + '</button>').join('') + '</div><div id="diaBody" class="mt-4"></div>';
+  if (UI.dia.modo === 'card') vDiaCard($('#diaBody')); else vDiaRec($('#diaBody'));
+}
+
+/* ---- Calcular receita: escolher a receita e quanto produzir ---- */
+// Quantidade para a cozinha: até 1 casa decimal, sem arredondar ao inteiro; ovos e líquidos mostram também os gramas
+function qtdCozinha(l) {
+  const n = v => nf(v, 1);
+  if (l.u === 'un') return n(l.q) + ' un' + (l.g !== null ? ' · ' + n(l.g) + ' g' : '');
+  if (l.u === 'ml') return n(l.q) + ' ml' + (l.g !== null ? ' · ' + n(l.g) + ' g' : '');
+  return n(l.q) + ' ' + l.u;
+}
+const avisoCozinha = l => l.avisos.some(a => /densidade|peso unitário|peso médio|medida caseira|removido/.test(a));
+function recOpcoes() {
+  const fs = DB.fichas.slice().sort(byNome), ps = DB.preparos.slice().sort(byNome);
+  return '<optgroup label="Fichas técnicas">' + fs.map(f => '<option value="f:' + f.id + '"' + (UI.rec.ref === 'f:' + f.id ? ' selected' : '') + '>' + esc(f.nome) + '</option>').join('') + '</optgroup>' +
+    '<optgroup label="Preparos e bases">' + ps.map(p => '<option value="p:' + p.id + '"' + (UI.rec.ref === 'p:' + p.id ? ' selected' : '') + '>' + esc(p.nome) + '</option>').join('') + '</optgroup>';
+}
+function recAtual() {
+  const R = UI.rec, t = R.ref[0], o = t === 'f' ? fichaById(R.ref.slice(2)) : prepById(R.ref.slice(2));
+  if (!o) { const f = DB.fichas[0]; R.ref = f ? 'f:' + f.id : (DB.preparos[0] ? 'p:' + DB.preparos[0].id : ''); return R.ref ? recAtual() : null; }
+  if (t === 'f') {
+    if (!(o.rendimentos || []).some(r => r.emb === R.emb)) R.emb = (o.rendimentos[0] || {}).emb || '';
+    if (R.modo === 'pronto') R.modo = 'mult';
+  } else if (R.modo === 'un') R.modo = 'mult';
+  return { t, o };
+}
+function vDiaRec(el) {
+  const R = UI.rec, a = recAtual();
+  if (!a) { el.innerHTML = '<div class="empty">Cadastre uma ficha técnica em Administração.</div>'; return; }
+  const { t, o } = a;
+  const embs = t === 'f' ? (o.rendimentos || []).map(r => ({ r, e: embById(r.emb) })).filter(x => x.e) : [];
+  const modos = t === 'f' ? [['mult', 'Multiplicar receita'], ['un', 'Por unidades']] : [['mult', 'Multiplicar receita'], ['pronto', 'Peso pronto']];
+  const opc = t === 'f' ? (o.componentes || []).map((c, k) => ({ c, k })).filter(x => x.c.opcional) : [];
+  el.innerHTML = '<section class="card">' +
+    '<label class="fl">Receita<select class="inp mt-1" data-ch="recRef" aria-label="Receita">' + recOpcoes() + '</select></label>' +
+    (t === 'f' ? '<label class="fl mt-3">Embalagem<select class="inp mt-1" data-ch="recEmb" aria-label="Embalagem">' +
+      (embs.length ? embs.map(x => '<option value="' + x.e.id + '"' + (R.emb === x.e.id ? ' selected' : '') + '>' + esc(x.e.nome) + '</option>').join('') : '<option value="">Nenhuma embalagem cadastrada</option>') + '</select></label>' : '') +
+    '<div class="fl mt-4">Como calcular<div class="seg mt-1">' + modos.map(([k, tx]) => '<button class="' + (R.modo === k ? 'on' : '') + '" data-act="recModo" data-v="' + k + '">' + tx + '</button>').join('') + '</div></div>' +
+    (R.modo === 'mult'
+      ? '<div class="flex flex-wrap gap-2 mt-4">' + [0.5, 1, 2, 3, 4].map(v => '<button class="chip' + (R.mult === v ? ' on' : '') + '" data-act="recMult" data-v="' + v + '">' + nf(v, 1) + '×</button>').join('') + '</div>' +
+        '<label class="fl mt-3">Outro multiplicador<div class="relative"><input id="recMultIn" class="inp" style="padding-right:44px" data-in="recMult" inputmode="decimal" value="' + ([0.5, 1, 2, 3, 4].includes(R.mult) ? '' : nfIn(R.mult)) + '" placeholder="ex.: 1,5"><span class="suffix-sm">×</span></div></label>'
+      : '<label class="fl mt-4">' + (R.modo === 'un' ? 'Quantas unidades?' : 'Quantos gramas prontos?') + '<div class="relative"><input class="inp inp-xl" style="padding-right:64px" data-in="recQtd" inputmode="decimal" value="' + esc(R.qtd) + '" placeholder="0"><span class="suffix">' + (R.modo === 'un' ? 'un' : 'g') + '</span></div></label>') +
+    (opc.length ? '<div class="mt-4">' + opc.map(x => '<label class="check mt-2"><input type="checkbox" data-ch="recOpc" data-k="' + x.k + '"' + (R.excl.includes(x.k) ? '' : ' checked') + '> Incluir ' + esc(x.c.nome.toLowerCase()) + '</label>').join('') + '</div>' : '') +
+    '</section><section id="recRes" class="mt-4"></section>';
+  updRec();
+}
+// Calcula o resultado da tela "Calcular receita"
+function recResultado() {
+  const R = UI.rec, a = recAtual(); if (!a) return null;
+  const { t, o } = a;
+  let mult = null, erro = '', sub = '';
+  if (R.modo === 'mult') { mult = R.mult; sub = nf(R.mult, 2) + '× a receita'; }
+  else if (R.modo === 'un') {
+    const m = Calc.multPorUnidades(o, R.emb, num(R.qtd));
+    if (m.ok) { mult = m.mult; sub = nf(num(R.qtd), 1) + ' unidades'; } else erro = m.motivo;
+  } else {
+    const m = Calc.multPorPronto(DB, o, num(R.qtd));
+    if (m.ok) { mult = m.mult; sub = nf(num(R.qtd), 1) + ' g prontos'; } else erro = m.motivo;
+  }
+  if (erro) return { t, o, erro };
+  if (!(mult > 0)) return { t, o, erro: 'Informe a quantidade' };
+  const grupos = t === 'f' ? Calc.expandirFicha(DB, o, mult, R.excl).filter(g => g.incluido)
+    : [{ nome: o.nome, linhas: Calc.linhasPreparo(DB, o, mult), avisos: (o.itens || []).length ? [] : ['receita ainda não cadastrada'] }];
+  const e = t === 'f' ? embById(R.emb) : null;
+  const rend = t === 'f' ? Calc.rendimentoEmbalagem(o, R.emb) : null;
+  return { t, o, mult, sub, grupos, e, rend };
+}
+function updRec() {
+  const el = $('#recRes'); if (!el) return;
+  const r = recResultado(); if (!r) { el.innerHTML = ''; return; }
+  if (r.erro) {
+    el.innerHTML = r.erro === 'Informe a quantidade' ? '<div class="empty">Digite a quantidade que precisa produzir.</div>' :
+      '<section class="card" style="background:#FFF7E8;border-color:#F3DFB8"><div class="font-extrabold">' + esc(r.erro) + '</div>' +
+      '<p class="text-[14px] mt-1 leading-relaxed">' + (r.t === 'f' ? 'Ainda não sabemos quantas unidades esta receita rende nesta embalagem. Faça uma receita e peça ao gerente para registrar o rendimento (Administração → Fichas técnicas).'
+        : 'Ainda não medimos quanto este preparo rende pronto. Pese antes e depois de cozinhar e registre em Administração → Preparos.') + '</p>' +
+      '<button class="btn btn-pri w-full mt-3" data-act="recModo" data-v="mult">Calcular multiplicando a receita</button></section>';
+    return;
+  }
+  const temAviso = r.grupos.some(g => g.linhas.some(avisoCozinha));
+  const porUn = r.t === 'f' && UI.rec.modo === 'un' && r.rend && r.rend.porUnidade ? (r.o.componentes || []).map((c, k) => r.rend.porUnidade[k] > 0 ? esc(c.nome) + ' ' + nf(r.rend.porUnidade[k], 1) + ' g' : '').filter(Boolean) : [];
+  el.innerHTML = '<section class="card hero"><div class="lbl">Produzir</div><div class="font-extrabold text-[24px] leading-tight mt-1">' + esc(r.o.nome) + '</div>' +
+    '<div class="font-semibold mt-1" style="opacity:.9">' + esc(r.sub) + (r.e ? ' · ' + esc(r.e.nome) : '') + '</div>' +
+    (function () { const t = Calc.pesoTotal([].concat(...r.grupos.map(g => g.linhas))); return t.pendente || !(t.g > 0) ? '' : '<div class="text-[14px] mt-2" style="opacity:.85">Peso total dos ingredientes: ' + nf(t.g, 1) + ' g</div>'; })() +
+    (porUn.length ? '<div class="text-[14px] mt-2" style="opacity:.85">Porcionar por unidade: ' + porUn.join(' · ') + '</div>' : '') + '</section>' +
+    r.grupos.map(g => '<section class="card mt-3"><div class="flex items-baseline justify-between gap-2"><div class="lbl">' + esc(g.nome) + '</div>' + totalGrupoHtml(r, g) + '</div>' +
+      (g.avisos.length ? '<p class="note mt-2">' + esc(g.avisos.join('; ')) + '</p>' : '') +
+      '<ul class="ul mt-1">' + g.linhas.map(l => '<li class="li"><span>' + esc(l.nome) + (avisoCozinha(l) ? ' <span class="est">*</span>' : '') + '</span><b style="font-size:18px">' + qtdCozinha(l) + '</b></li>').join('') + '</ul></section>').join('') +
+    (temAviso ? '<p class="note mt-3"><span class="est">*</span> confirmar com o gerente (peso médio, densidade ou medida caseira ainda não conferidos).</p>' : '') +
+    '<div class="grid grid-cols-2 gap-2 mt-4"><button class="btn btn-pri" data-act="recCopy">' + ic('copy') + ' Copiar</button><button class="btn btn-wa" data-act="recWa">' + ic('wa') + ' WhatsApp</button></div>';
+}
+// Total de cada componente no Diário (só aparece se todos os itens têm peso em g) e rendimento medido, se houver
+function totalGrupo(r, g) {
+  const p = Calc.pesoTotal(g.linhas);
+  const c = r.t === 'f' && g.k != null ? (r.o.componentes || [])[g.k] : null;
+  return { g: p.pendente || !(p.g > 0) ? null : p.g, rend: c && c.rend > 0 ? c.rend * r.mult : null };
+}
+function totalGrupoHtml(r, g) {
+  const t = totalGrupo(r, g);
+  if (t.g === null && t.rend === null) return '';
+  return '<div class="text-[13px] font-bold text-right" style="color:var(--txt-2)">' + (t.g !== null ? 'total ' + nf(t.g, 1) + ' g' : '') + (t.rend !== null ? (t.g !== null ? '<br>' : '') + 'rende ≈ ' + nf(t.rend, 1) + ' g pronto' : '') + '</div>';
+}
+function totalGrupoTxt(r, g) {
+  const t = totalGrupo(r, g);
+  return t.g === null && t.rend === null ? '' : ' (' + [t.g !== null ? 'total ' + nf(t.g, 1) + ' g' : '', t.rend !== null ? 'rende ≈ ' + nf(t.rend, 1) + ' g pronto' : ''].filter(Boolean).join(' · ') + ')';
+}
+function textoRec() {
+  const r = recResultado(); if (!r || r.erro) return '';
+  return ('*Balayó — ' + r.o.nome + '*\n' + r.sub + (r.e ? ' · ' + r.e.nome : '') + '\n' +
+    r.grupos.map(g => '\n*' + g.nome + '*' + totalGrupoTxt(r, g) + '\n' + g.linhas.map(l => '• ' + l.nome + ': ' + qtdCozinha(l) + (avisoCozinha(l) ? ' *' : '')).join('\n')).join('\n')).trim();
+}
+
+/* ---- Lista do cardápio (produção por produto do cardápio) ---- */
+function vDiaCard(m) {
   const cats = ['Todos'].concat(catsProdutos());
   if (!cats.includes(UI.dia.cat)) UI.dia.cat = 'Todos';
-  m.innerHTML = bannerSenha() +
+  m.innerHTML =
   '<section class="card"><div class="flex items-center justify-between gap-3"><div><div class="lbl">Produção de hoje</div>' +
   '<div class="font-extrabold text-[19px] mt-1">' + esc(hojeTxt()) + '</div></div><div id="dResumo" class="text-right"></div></div></section>' +
   '<div class="hscroll mt-4">' + cats.map(c => '<button class="chip' + (UI.dia.cat === c ? ' on' : '') + '" data-act="dCat" data-v="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div>' +
@@ -1051,7 +1240,11 @@ function updDiaList() {
 const tagPrep = c => c.info.prep ? ' <em class="tag">' + (c.cru ? 'cru' : 'pronto') + '</em>' : '';
 function blocoPesagem(r) {
   return '<section class="card mt-3"><div class="lbl">Pesagem total</div><ul class="ul mt-1">' +
-    r.linhas.map(c => '<li class="li"><span>' + esc(c.info.nome) + tagPrep(c) + '</span><b>' + fqBig(c.q, c.info.un) + '</b></li>').join('') + '</ul></section>';
+    r.linhas.map(c => '<li class="li"><span>' + esc(c.info.nome) + tagPrep(c) + '</span><b>' + fqBig(c.q, c.info.un) + '</b></li>').join('') +
+    r.fichas.map(fx => '<li class="li"><span>' + esc(fx.f.nome) + ' <em class="tag">ficha</em>' + (fx.emb ? '<small class="block text-[12.5px]" style="color:var(--txt-2)">' + esc(fx.emb.nome) + '</small>' : '') + '</span><b>' + nf(fx.q, 1) + ' un</b></li>').join('') + '</ul></section>' +
+    r.fichas.map(fx => '<section class="card mt-3"><div class="lbl">' + esc(fx.f.nome) + ' — ' + nf(fx.q, 1) + ' un</div>' +
+      (fx.ok ? fx.grupos.map(g => '<div class="font-extrabold mt-3">' + esc(g.nome) + '</div><ul class="ul">' + g.linhas.map(l => '<li class="li"><span>' + esc(l.nome) + '</span><b>' + qtdCozinha(l) + '</b></li>').join('') + '</ul>').join('')
+        : '<p class="note mt-2" style="color:var(--warn)">' + esc(fx.motivo) + ' para esta embalagem. Registre o rendimento em Administração → Fichas técnicas.</p>') + '</section>').join('');
 }
 function blocoPreparos(r) {
   if (!r.preps.length) return '';
@@ -1061,7 +1254,9 @@ function blocoPreparos(r) {
 }
 function blocoTotais(r) {
   return '<section class="card mt-3"><div class="lbl">Ingredientes crus (total)</div><ul class="ul mt-1">' +
-    r.totais.map(x => '<li class="li"><span>' + esc(x.ins.nome) + '</span><b>' + fqBig(x.q, x.ins.un) + '</b></li>').join('') + '</ul></section>';
+    r.totais.map(x => '<li class="li"><span>' + esc(x.ins.nome) + '</span><b>' + fqBig(x.q, x.ins.un) + '</b></li>').join('') + '</ul>' +
+    (r.naoSomados.length ? '<p class="note mt-2">Não somados (falta densidade ou peso unitário): ' + r.naoSomados.map(x => esc(x.nome) + ' ' + nf(x.q, 1) + ' ' + x.u + ' (' + esc(x.de) + ')').join('; ') + '</p>' : '') +
+    (r.fichas.some(fx => !fx.ok) ? '<p class="note mt-2" style="color:var(--warn)">Fichas sem rendimento calibrado não entram na soma: ' + r.fichas.filter(fx => !fx.ok).map(fx => esc(fx.f.nome)).join(', ') + '.</p>' : '') + '</section>';
 }
 function textoProducao() {
   const r = calcProducao();
@@ -1075,6 +1270,10 @@ function textoProducao() {
       t += '\n\n*Preparos — pesar cru*';
       r.preps.forEach(p => { t += '\n_' + p.info.nome + ' — ' + fq(p.q, p.info.un) + ' ' + (p.cru ? 'cru' : 'pronto') + ' (' + nf(p.fator * 100, 0) + '% da receita)_\n' + p.itens.map(x => '   - ' + x.ins.nome + ': ' + fq(x.q, x.ins.un)).join('\n'); });
     }
+    r.fichas.forEach(fx => {
+      t += '\n\n*' + fx.f.nome + ' — ' + nf(fx.q, 1) + ' un*' + (fx.ok ? '' : '\n(' + fx.motivo + ')');
+      fx.grupos.forEach(g => { t += '\n_' + g.nome + '_\n' + g.linhas.map(l => '   - ' + l.nome + ': ' + qtdCozinha(l)).join('\n'); });
+    });
   }
   return t.trim();
 }
@@ -1119,8 +1318,8 @@ function vPreco(m) {
   }
   touchAdmin();
   const S = UI.preco;
-  m.innerHTML = '<div class="seg">' + [['produtos', 'Produtos'], ['insumos', 'Insumos'], ['custos', 'Custos da casa']].map(([k, t]) => '<button class="' + (S.sub === k ? 'on' : '') + '" data-act="pcSub" data-v="' + k + '">' + t + '</button>').join('') + '</div><div id="pcBody" class="mt-4"></div>';
-  ({ produtos: pcProdutos, insumos: pcInsumos, custos: pcCustos })[S.sub]($('#pcBody'));
+  m.innerHTML = '<div class="seg">' + [['produtos', 'Produtos'], ['receitas', 'Receitas'], ['insumos', 'Insumos'], ['custos', 'Custos']].map(([k, t]) => '<button class="' + (S.sub === k ? 'on' : '') + '" data-act="pcSub" data-v="' + k + '">' + t + '</button>').join('') + '</div><div id="pcBody" class="mt-4"></div>';
+  ({ produtos: pcProdutos, receitas: pcReceitas, insumos: pcInsumos, custos: pcCustos })[S.sub]($('#pcBody'));
 }
 function pcProdutos(el) {
   const c = DB.config.custos, semPreco = DB.insumos.filter(insSemPreco).length;
@@ -1218,7 +1417,9 @@ function sheetInsumo(id, onSaved) {
       '<div class="card mt-4" style="background:#FBF7F1"><div class="lbl">Valor de compra</div><div class="grid grid-cols-2 gap-2 mt-2">' +
       '<label class="fl">Paguei (R$)<input class="inp" data-in="n" data-k="preco" inputmode="decimal" value="' + nfIn0(d.preco) + '" placeholder="0,00"></label>' +
       '<label class="fl">Pela embalagem de (<span id="unLbl">' + d.un + '</span>)<input class="inp" data-in="n" data-k="qtd" inputmode="decimal" value="' + nfIn0(d.qtd) + '"></label></div>' +
-      '<label id="pesoBox" class="fl mt-2' + (d.un === 'un' ? '' : ' hidden') + '">Peso de 1 unidade em gramas (opcional, usado nas receitas base)<input class="inp inp-sm" data-in="n" data-k="pesoUn" inputmode="decimal" value="' + nfIn0(d.pesoUn) + '"></label>' +
+      '<div id="pesoBox" class="mt-2' + (d.un === 'un' ? '' : ' hidden') + '"><label class="fl">Peso médio de 1 unidade, sem casca ou embalagem (g)<input class="inp inp-sm" data-in="n" data-k="pesoUn" inputmode="decimal" value="' + nfIn0(d.pesoUn) + '"></label>' +
+      '<label class="check mt-2"><input type="checkbox" data-ch="pconf"' + (d.pesoUnConf ? ' checked' : '') + '> Pesei e confirmei esse peso médio</label></div>' +
+      '<label class="fl mt-3">Densidade em g por ml (opcional: converte ml ↔ g)<input class="inp inp-sm" data-in="n" data-k="dens" inputmode="decimal" value="' + nfIn0(d.dens) + '" placeholder="meça: pese 100 ml e divida por 100"></label>' +
       '<div id="insCalc" class="calc mt-3"></div>' +
       '<label class="check mt-3"><input type="checkbox" data-ch="zero"' + (d.zero ? ' checked' : '') + '> Item sem custo (ex.: água)</label></div>' +
       '<label class="fl mt-4">Fornecedor<input class="inp inp-sm" data-in="t" data-k="forn" value="' + esc(d.forn) + '" placeholder="Opcional"></label>' +
@@ -1254,7 +1455,8 @@ function sheetInsumo(id, onSaved) {
         catNova: el => { d.cat = el.value.trim() || 'Outros'; }
       }, {
         cat: el => { const nova = el.value === '__nova'; $('#catNova', B).classList.toggle('hidden', !nova); if (nova) $('#catNova', B).focus(); else d.cat = el.value; },
-        zero: el => { d.zero = el.checked; calc(); }
+        zero: el => { d.zero = el.checked; calc(); },
+        pconf: el => { d.pesoUnConf = el.checked; }
       });
       calc();
       if (!orig) setTimeout(() => { const i = $('[data-k=nome]', B); if (i) i.focus(); }, 320);
@@ -1313,19 +1515,30 @@ function vAdmin(m) {
   if (S === 'bar') return admBar(m);
   if (S === 'chk') return admChk(m);
   if (S === 'painel') return admPainel(m);
+  if (S === 'fichas') return admFichas(m);
+  if (S === 'emb') return admEmb(m);
+  if (S === 'comp') return admComp(m);
   const semPreco = DB.insumos.filter(insSemPreco).length;
+  const semRend = DB.fichas.filter(f => !(f.rendimentos || []).some(r => r.unidades > 0)).length;
   m.innerHTML = bannerSenha() +
     '<section class="card" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Equipe</div>' +
     menuRow('admPainel', 'chk', 'Painel da equipe', 'acessos e checklists de cada pessoa') + '</section>' +
+    '<section class="card mt-4" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Receitas</div>' +
+    menuRow('admFichas', 'dia', 'Fichas técnicas', DB.fichas.length + ' receitas' + (semRend ? ' · ' + semRend + ' sem rendimento calibrado' : '')) +
+    menuRow('admComp', 'chk', 'Componentes', DB.componentesCat.length + ' na lista · massa, molho, xarope…') +
+    menuRow('admPrep', 'cru', 'Preparos e bases', DB.preparos.length + ' receitas · caldas, massas, recheios, cru × pronto') +
+    menuRow('admEmb', 'chk', 'Formas e embalagens', DB.embalagens.length + ' cadastradas') + '</section>' +
     '<section class="card mt-4" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Cardápio</div>' +
     menuRow('admProd', 'dia', 'Produtos do cardápio', DB.produtos.length + ' itens · adicionar, editar, excluir') +
-    menuRow('admPrep', 'cru', 'Preparos e receitas base', DB.preparos.length + ' receitas · perda na cocção') +
     menuRow('admBar', 'bar', 'Receitas do bar', DB.bebidas.length + ' bebidas · ' + DB.bebidas.filter(b => b.status === 'teste').length + ' em teste') +
     menuRow('admChk', 'chk', 'Checklists', DB.checklists.length + ' modelos · abertura e fechamento') + '</section>' +
     '<section class="card mt-4" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Preços</div>' +
     menuRow('goIns', 'preco', 'Insumos e valores de compra', semPreco ? semPreco + ' sem preço' : 'todos com preço') +
     menuRow('goCustos', 'gear', 'Custos da casa e percentuais', '') + '</section>' +
-    '<section class="card mt-4"><div class="lbl">Proporções padrão (aba 1)</div><div class="grid grid-cols-2 gap-2 mt-2">' +
+    '<section class="card mt-4" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Ferramentas</div>' +
+    menuRow('goCru', 'cru', 'Calculadora cru × cozido', 'a conta livre de perda na cocção') +
+    menuRow('goProp', 'prop', 'Proporções de encomenda', 'divisão por % (massa, recheio, calda, cobertura)') + '</section>' +
+    '<section class="card mt-4"><div class="lbl">Proporções padrão (ferramenta de encomenda)</div><div class="grid grid-cols-2 gap-2 mt-2">' +
     c.props.map((p, i) => '<label class="fl">' + esc(p.nome) + ' (%)<input class="inp inp-sm" id="admPct' + i + '" inputmode="decimal" value="' + nfIn(p.pct) + '"></label>').join('') + '</div>' +
     '<div class="grid grid-cols-2 gap-2 mt-3"><button class="btn btn-out" data-act="propLivro">Padrão do livro</button><button class="btn btn-pri" data-act="propSave">Salvar</button></div></section>' +
     '<section class="card mt-4" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Segurança</div>' +
@@ -1338,7 +1551,7 @@ function vAdmin(m) {
     menuRow('bkReset', 'warn', 'Restaurar dados originais', 'apaga suas alterações e preços') +
     '<input type="file" id="bkFile" data-ch="bkFile" accept=".json,application/json" class="hidden"></section>' +
     '<div class="grid grid-cols-2 gap-2 mt-4"><button class="btn btn-out" data-act="admLock">Sair do admin</button><button class="btn btn-out" data-act="appLock">' + ic('lock') + ' Bloquear app</button></div>' +
-    '<p class="text-center text-[12px] mt-6" style="color:var(--txt-2)">Balayó Proporções · v1.0 · São Miguel dos Milagres</p>';
+    '<p class="text-center text-[12px] mt-6" style="color:var(--txt-2)">Balayó · v2.0 (fichas técnicas) · São Miguel dos Milagres</p>';
 }
 function admProdutos(m) {
   m.innerHTML = '<button class="back" data-act="admMenu">' + ic('back', 20, 2.6) + ' Administração</button>' +
@@ -1351,12 +1564,13 @@ function admProdutos(m) {
 function admPreparos(m) {
   m.innerHTML = '<button class="back" data-act="admMenu">' + ic('back', 20, 2.6) + ' Administração</button>' +
     '<div class="flex items-center justify-between mt-1"><h2 class="h2">Preparos</h2><button class="btn btn-pri" style="min-height:46px" data-act="prepNovo">' + ic('plus') + ' Novo</button></div>' +
-    '<p class="note mt-3">Receitas base (massas, recheios, caldas). A <b>perda</b> é quanto o peso diminui no fogo — usada na aba Cru × Cozido e no Diário.</p>' +
-    '<div class="card mt-3" style="padding:4px 14px">' + DB.preparos.slice().sort(byNome).map(p => { const st = prepStats(p);
-      return '<button class="ins-row" data-act="prepEdit" data-id="' + p.id + '"><div class="flex-1 min-w-0"><div class="font-bold">' + esc(p.nome) + '</div><div class="text-[13px]" style="color:var(--txt-2)">perde ' + nf(p.perda, 1) + '% · rende ' + fq(st.pronto, p.un) +
-        (st.porPronto ? ' · ' + brl(st.porPronto * 1000) + '/' + (p.un === 'g' ? 'kg' : 'L') : '') + '</div></div>' + (p.est ? '<span class="badge warn">estimada</span>' : '') + ic('chev', 18, 2.4) + '</button>'; }).join('') + '</div>';
+    '<p class="note mt-3">Receitas reutilizáveis (caldas, cremes, massas, recheios). Para o Diário calcular "peso pronto", pese o preparo antes e depois de cozinhar e registre aqui.</p>' +
+    '<div class="card mt-3" style="padding:4px 14px">' + DB.preparos.slice().sort(byNome).map(p => { const r = Calc.rendimentoPreparo(DB, p);
+      const txt = !(p.itens || []).length ? 'receita ainda não cadastrada' : r.fonte === 'medido' ? 'medido: perde ' + nf(r.perda * 100, 1) + '%' : r.fonte === 'nenhum' ? 'rendimento não calibrado' : 'perde ' + nf(r.perda * 100, 1) + '% (' + (r.fonte === 'estimado' ? 'estimado' : 'informado') + ')';
+      return '<button class="ins-row" data-act="prepEdit" data-id="' + p.id + '"><div class="flex-1 min-w-0"><div class="font-bold">' + esc(p.nome) + '</div><div class="text-[13px]" style="color:var(--txt-2)">' + txt + '</div></div>' +
+        (r.fonte === 'medido' ? '<span class="badge ok">medido</span>' : !(p.itens || []).length ? '<span class="badge warn">sem receita</span>' : r.fonte === 'estimado' || r.fonte === 'nenhum' ? '<span class="badge warn">calibrar</span>' : '') + ic('chev', 18, 2.4) + '</button>'; }).join('') + '</div>';
 }
-function openPicker(soInsumos, cb) {
+function openPicker(soInsumos, cb, comFichas) {
   openSheet({
     title: 'Escolher item',
     html: '<div class="relative"><input class="inp inp-sm" style="padding-left:44px" data-in="busca" placeholder="Buscar" aria-label="Buscar"><span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--txt-2)">' + ic('search', 20) + '</span></div>' +
@@ -1367,7 +1581,9 @@ function openPicker(soInsumos, cb) {
         const f = s => !q || norm(s).includes(norm(q));
         const preps = soInsumos ? [] : DB.preparos.filter(p => f(p.nome)).sort(byNome);
         const ins = DB.insumos.filter(i => f(i.nome)).sort(byNome);
-        const h = (preps.length ? '<div class="lbl mb-2">Preparos (receitas base)</div>' + preps.map(p => '<button class="pk" data-act="sel" data-r="p:' + p.id + '"><span>' + esc(p.nome) + '</span><small>' + p.un + '</small></button>').join('') : '') +
+        const fichas = comFichas ? DB.fichas.filter(x => f(x.nome)).sort(byNome) : [];
+        const h = (fichas.length ? '<div class="lbl mb-2">Fichas técnicas (custo por unidade calibrada)</div>' + fichas.map(x => '<button class="pk" data-act="sel" data-r="f:' + x.id + '"><span>' + esc(x.nome) + '</span><small>un</small></button>').join('') + '<div class="mb-4"></div>' : '') +
+          (preps.length ? '<div class="lbl mb-2">Preparos (receitas base)</div>' + preps.map(p => '<button class="pk" data-act="sel" data-r="p:' + p.id + '"><span>' + esc(p.nome) + '</span><small>' + p.un + '</small></button>').join('') : '') +
           (ins.length ? '<div class="lbl mt-4 mb-2">Insumos</div>' + ins.map(i => '<button class="pk" data-act="sel" data-r="i:' + i.id + '"><span>' + esc(i.nome) + '</span><small>' + i.un + '</small></button>').join('') : '');
         $('#pkList', api.body).innerHTML = h || '<p class="note">Nada encontrado.</p>';
       };
@@ -1404,17 +1620,18 @@ function sheetProduto(id, onSaved) {
       const drawCusto = () => { const r = prodCusto(d); $('#peCusto', B).innerHTML = 'Custo dos ingredientes por unidade: <b>' + brl(r.total) + '</b>' + (r.falta.length ? '<br><span style="color:var(--warn)">Sem preço: ' + r.falta.map(esc).join(', ') + '</span>' : ''); };
       const drawLines = () => {
         $('#peLines', B).innerHTML = d.itens.length ? d.itens.map((l, k) => { const r = linha(l);
-          return '<div class="pline"><div class="flex items-start gap-2"><button class="pick flex-1" data-act="pick" data-k="' + k + '"><span class="tag">' + (r.prep ? 'preparo' : 'insumo') + '</span><span class="font-bold">' + esc(r.nome) + '</span>' + (l.est ? '<span class="est">*</span>' : '') + ic('chevd', 16, 2.4) + '</button>' +
+          return '<div class="pline"><div class="flex items-start gap-2"><button class="pick flex-1" data-act="pick" data-k="' + k + '"><span class="tag">' + (r.ficha ? 'ficha' : r.prep ? 'preparo' : 'insumo') + '</span><span class="font-bold">' + esc(r.nome) + '</span>' + (l.est ? '<span class="est">*</span>' : '') + ic('chevd', 16, 2.4) + '</button>' +
             '<button class="iconbtn sm" data-act="rmL" data-k="' + k + '" aria-label="Remover item">' + ic('x', 18, 2.4) + '</button></div>' +
             '<div class="flex items-center gap-2 mt-2"><div class="relative" style="width:132px"><input class="inp inp-sm" style="padding-right:40px" data-in="lq" data-k="' + k + '" inputmode="decimal" value="' + nfIn(l.q) + '" aria-label="Quantidade"><span class="suffix-sm">' + r.un + '</span></div>' +
-            (r.prep ? '<div class="seg seg-sm flex-1"><button class="' + (l.cru ? 'on' : '') + '" data-act="cru" data-k="' + k + '" data-v="1">cru</button><button class="' + (!l.cru ? 'on' : '') + '" data-act="cru" data-k="' + k + '" data-v="0">pronto</button></div>' : '') + '</div>' +
+            (r.prep ? '<div class="seg seg-sm flex-1"><button class="' + (l.cru ? 'on' : '') + '" data-act="cru" data-k="' + k + '" data-v="1">cru</button><button class="' + (!l.cru ? 'on' : '') + '" data-act="cru" data-k="' + k + '" data-v="0">pronto</button></div>' : '') +
+            (r.ficha ? '<select class="inp inp-sm flex-1" data-ch="lemb" data-k="' + k + '" aria-label="Embalagem">' + (r.o.rendimentos || []).map(x => { const e = embById(x.emb); return e ? '<option value="' + e.id + '"' + (l.emb === e.id ? ' selected' : '') + '>' + esc(e.nome) + (x.unidades > 0 ? '' : ' (não calibrado)') + '</option>' : ''; }).join('') + '</select>' : '') + '</div>' +
             '<input class="inp inp-sm mt-2" style="font-size:15px;font-weight:500" data-in="lobs" data-k="' + k + '" value="' + esc(l.obs || '') + '" placeholder="Observação (opcional)"></div>'; }).join('')
           : '<p class="note">Nenhum item ainda. Toque em “Adicionar”.</p>';
         drawCusto();
       };
       delegate(B, {
-        add: () => openPicker(false, r => { d.itens.push({ r, q: 0 }); drawLines(); const ins = $$('[data-in=lq]', B); if (ins.length) ins[ins.length - 1].focus(); }),
-        pick: el => openPicker(false, r => { d.itens[+el.dataset.k].r = r; drawLines(); }),
+        add: () => openPicker(false, r => { const l = { r, q: r[0] === 'f' ? 1 : 0 }; if (r[0] === 'f') { const f = fichaById(r.slice(2)); l.emb = f && f.rendimentos[0] ? f.rendimentos[0].emb : ''; } d.itens.push(l); drawLines(); const ins = $$('[data-in=lq]', B); if (ins.length) ins[ins.length - 1].focus(); }, true),
+        pick: el => openPicker(false, r => { const l = d.itens[+el.dataset.k]; l.r = r; if (r[0] === 'f') { const f = fichaById(r.slice(2)); l.emb = f && f.rendimentos[0] ? f.rendimentos[0].emb : ''; } else delete l.emb; drawLines(); }, true),
         rmL: el => { d.itens.splice(+el.dataset.k, 1); drawLines(); },
         cru: el => { const l = d.itens[+el.dataset.k]; if (el.dataset.v === '1') l.cru = 1; else delete l.cru; drawLines(); },
         save: () => {
@@ -1435,7 +1652,8 @@ function sheetProduto(id, onSaved) {
         lobs: el => { d.itens[+el.dataset.k].obs = el.value; },
         catNova: el => { d.cat = el.value.trim() || 'Outros'; }
       }, {
-        cat: el => { const nova = el.value === '__nova'; $('#catNova', B).classList.toggle('hidden', !nova); if (nova) $('#catNova', B).focus(); else d.cat = el.value; }
+        cat: el => { const nova = el.value === '__nova'; $('#catNova', B).classList.toggle('hidden', !nova); if (nova) $('#catNova', B).focus(); else d.cat = el.value; },
+        lemb: el => { d.itens[+el.dataset.k].emb = el.value; drawCusto(); }
       });
       drawLines();
     }
@@ -1443,16 +1661,19 @@ function sheetProduto(id, onSaved) {
 }
 function sheetPreparo(id) {
   const orig = id ? prepById(id) : null;
-  const d = orig ? clone(orig) : { id: uid('p'), nome: '', un: 'g', perda: 0, itens: [], modo: '', est: 0, fonte: '' };
+  const d = orig ? clone(orig) : { id: uid('p'), nome: '', un: 'g', perda: null, itens: [], modo: '', est: 0, fonte: '' };
   const usos = orig ? usosPreparo(orig.id) : [];
   openSheet({
     title: orig ? 'Editar preparo' : 'Novo preparo',
     html: '<label class="fl">Nome<input class="inp" data-in="t" data-k="nome" value="' + esc(d.nome) + '" placeholder="Ex.: Ganache"></label>' +
       '<div class="fl mt-3">Medida do preparo pronto<div class="seg mt-1" id="unSeg">' + [['g', 'gramas (g)'], ['ml', 'mililitros (ml)']].map(([u, t]) => '<button class="' + (d.un === u ? 'on' : '') + '" data-act="un" data-v="' + u + '">' + t + '</button>').join('') + '</div></div>' +
-      '<label class="fl mt-3">Perda na cocção (%)<input id="perdaIn" class="inp" data-in="n" data-k="perda" inputmode="decimal" value="' + nfIn(d.perda) + '"></label>' +
-      '<div class="card mt-2" style="background:#FBF7F1;padding:12px"><div class="text-[13px] font-bold" style="color:var(--txt-2)">Não sabe a perda? Pese uma vez:</div><div class="grid grid-cols-2 gap-2 mt-2">' +
-      '<input class="inp inp-sm" id="mCru" inputmode="decimal" placeholder="Cru (g)" aria-label="Peso cru"><input class="inp inp-sm" id="mPr" inputmode="decimal" placeholder="Pronto (g)" aria-label="Peso pronto"></div>' +
-      '<button class="btn btn-sec w-full mt-2" style="min-height:46px" data-act="calcPerda">Calcular perda</button></div>' +
+      '<div class="card mt-3" style="background:#FBF7F1;padding:12px"><div class="lbl">Cru × pronto (calibração)</div><div id="prCalib" class="text-[14px] mt-2"></div>' +
+      '<div class="text-[13px] font-bold mt-3" style="color:var(--txt-2)">Pese uma vez, numa produção real:</div><div class="grid grid-cols-3 gap-2 mt-2">' +
+      '<label class="fl">Antes do fogo (g)<input class="inp inp-sm" id="mCru" inputmode="decimal" aria-label="Peso antes do cozimento"></label>' +
+      '<label class="fl">Depois (g)<input class="inp inp-sm" id="mPr" inputmode="decimal" aria-label="Peso depois do cozimento"></label>' +
+      '<label class="fl">Aproveitável (g)<input class="inp inp-sm" id="mApr" inputmode="decimal" placeholder="opcional" aria-label="Peso aproveitável"></label></div>' +
+      '<button class="btn btn-sec w-full mt-2" style="min-height:46px" data-act="calcPerda">Salvar medição</button>' +
+      '<label class="fl mt-3">Ou digite a perda conhecida (%)<input id="perdaIn" class="inp inp-sm" data-in="n" data-k="perda" inputmode="decimal" value="' + (d.perda == null ? '' : nfIn(d.perda)) + '" placeholder="vazio = não calibrado"></label></div>' +
       '<div class="lbl mt-5">Ingredientes da receita base (crus)</div><div id="prLines" class="mt-2"></div>' +
       '<button class="btn btn-sec w-full mt-1" data-act="add">' + ic('plus') + ' Adicionar ingrediente</button>' +
       '<label class="fl mt-4">Modo de preparo / observações<textarea class="inp" data-in="t" data-k="modo" rows="3">' + esc(d.modo) + '</textarea></label>' +
@@ -1475,7 +1696,14 @@ function sheetPreparo(id) {
       };
       delegate(B, {
         un: el => { d.un = el.dataset.v; $$('#unSeg button', B).forEach(b => b.classList.toggle('on', b.dataset.v === d.un)); calc(); },
-        calcPerda: () => { const c = num($('#mCru', B).value), p = num($('#mPr', B).value); if (!(c > 0 && p > 0)) { toast('Preencha os dois pesos'); return; } d.perda = Math.round((1 - p / c) * 1000) / 10; $('#perdaIn', B).value = nfIn(d.perda); calc(); },
+        calcPerda: () => {
+          const c = num($('#mCru', B).value), p = num($('#mPr', B).value), a = num($('#mApr', B).value);
+          if (!(c > 0 && p > 0)) { toast('Preencha o peso antes e depois'); return; }
+          if (a > p) { toast('O aproveitável não pode ser maior que o peso depois'); return; }
+          d.calib = { antes: c, depois: p, aprov: a > 0 ? a : null, data: hojeISO() };
+          d.perda = (1 - p / c) * 100; d.est = 0;
+          $('#perdaIn', B).value = nfIn(d.perda); ['#mCru', '#mPr', '#mApr'].forEach(s => { $(s, B).value = ''; }); drawCalib(); calc();
+        },
         add: () => openPicker(true, r => { d.itens.push({ i: r.slice(2), q: 0 }); drawLines(); const ins = $$('[data-in=lq]', B); if (ins.length) ins[ins.length - 1].focus(); }),
         pick: el => openPicker(true, r => { d.itens[+el.dataset.k].i = r.slice(2); drawLines(); }),
         rmL: el => { d.itens.splice(+el.dataset.k, 1); drawLines(); },
@@ -1494,9 +1722,20 @@ function sheetPreparo(id) {
         }
       }, {
         t: el => { d[el.dataset.k] = el.value; },
-        n: el => { d[el.dataset.k] = num(el.value); calc(); },
+        n: el => {
+          if (el.dataset.k === 'perda') { d.perda = el.value.trim() === '' ? null : num(el.value); delete d.calib; d.est = 0; drawCalib(); calc(); return; }
+          d[el.dataset.k] = num(el.value); calc();
+        },
         lq: el => { d.itens[+el.dataset.k].q = num(el.value); calc(); }
       });
+      function drawCalib() {
+        const r = Calc.rendimentoPreparo(DB, d), c = d.calib;
+        $('#prCalib', B).innerHTML = r.fonte === 'medido'
+          ? '<b style="color:var(--ok)">Medido</b> em ' + esc((c.data || '').split('-').reverse().join('/')) + ': ' + nf(c.antes, 1) + ' g antes → ' + nf(c.depois, 1) + ' g depois (perde ' + nf(r.perda * 100, 1) + '%)' + (c.aprov ? ' · aproveitável ' + nf(c.aprov, 1) + ' g' : '')
+          : r.fonte === 'nenhum' ? '<b style="color:var(--warn)">Rendimento não calibrado.</b> O Diário só calcula "peso pronto" depois da medição.'
+          : 'Perda ' + (r.fonte === 'estimado' ? '<b style="color:var(--warn)">estimada</b>' : 'informada') + ': ' + nf(r.perda * 100, 1) + '%. Para mais precisão, faça a medição.';
+      }
+      drawCalib();
       drawLines();
     }
   });
@@ -1684,7 +1923,9 @@ function sheetChk(id) {
             ).join('') + '</ul><p class="note mt-4">Feitos: ' + n + ' de ' + total + '</p>') +
           (st.concl
             ? '<div class="okline mt-3">' + ic('check', 18, 2.6) + ' Concluído às ' + esc(st.concl.hora) + ' por ' + esc(st.concl.resp) + '</div><button class="btn btn-out w-full mt-3" data-act="chkReopen">Reabrir checklist</button>'
-            : (total ? '<button class="btn btn-pri w-full mt-4" data-act="chkDone">' + ic('check') + ' Concluir checklist</button>' : ''));
+            : (total ? '<button class="btn btn-pri w-full mt-4" data-act="chkDone">' + ic('check') + ' Concluir checklist</button>' : '')) +
+          (total ? '<div class="lbl mt-5">Enviar no grupo</div><div class="grid grid-cols-2 gap-2 mt-2"><button class="btn btn-wa" data-act="chkWa">' + ic('wa') + ' WhatsApp</button>' +
+            '<button class="btn btn-sec" data-act="chkImg">' + ic('download') + ' Baixar imagem</button></div>' : '');
       };
       delegate(B, {
         chkTog: el => { const st = chkStore(id), i = +el.dataset.i; st.feitos[i] = !st.feitos[i]; chkPut(id, st); draw(); },
@@ -1697,7 +1938,9 @@ function sheetChk(id) {
           const nums = c.items.map((it, i) => it.tipo === 'num' && String(st.vals[i] || '').trim() ? it.t + ': ' + String(st.vals[i]).trim() + (it.un ? ' ' + it.un : '') : '').filter(Boolean);
           logEvento('checklist', c.codigo + ' ' + c.titulo + ' · ' + chkCount(c, st) + ' de ' + chkTotal(c) + ' itens' + (nums.length ? ' · ' + nums.join('; ') : ''), c.id);
         },
-        chkReopen: () => { const st = chkStore(id); st.concl = null; chkPut(id, st); draw(); }
+        chkReopen: () => { const st = chkStore(id); st.concl = null; chkPut(id, st); draw(); },
+        chkWa: () => abrirWhats(textoChk(c)),
+        chkImg: () => baixarImgChk(c)
       }, {
         chkVal: el => { const st = chkStore(id); st.vals[+el.dataset.i] = el.value; chkPut(id, st); }
       });
@@ -1895,6 +2138,363 @@ async function painelAsync(P) {
   }
 }
 
+/* ================= FICHAS TÉCNICAS (Admin) ================= */
+function fichaStatus(f) {
+  const temIng = (f.componentes || []).some(c => c.tipo === 'preparo' ? !!c.p : (c.itens || []).length);
+  if (!temIng) return '<span class="badge warn">aguardando receita</span>';
+  return (f.rendimentos || []).some(r => r.unidades > 0) ? '<span class="badge ok">calibrada</span>' : '<span class="badge warn">calibrar rendimento</span>';
+}
+function admFichas(m) {
+  m.innerHTML = '<button class="back" data-act="admMenu">' + ic('back', 20, 2.6) + ' Administração</button>' +
+    '<div class="flex items-center justify-between mt-1"><h2 class="h2">Fichas técnicas</h2><button class="btn btn-pri" style="min-height:46px" data-act="fichaNova">' + ic('plus') + ' Nova</button></div>' +
+    '<p class="note mt-3">Cadastre a receita original uma vez, com os componentes (massa, recheio, calda, cobertura). No Diário a equipe só escolhe a receita e quanto quer produzir.</p>' +
+    '<div class="card mt-3" style="padding:4px 14px">' + DB.fichas.slice().sort(byNome).map(f => '<button class="ins-row" data-act="fichaEdit" data-id="' + f.id + '"><div class="flex-1 min-w-0"><div class="font-bold">' + esc(f.nome) + '</div>' +
+      '<div class="text-[13px]" style="color:var(--txt-2)">' + esc((f.componentes || []).map(c => c.nome).join(' · ') || 'sem componentes') + '</div></div>' + fichaStatus(f) + ic('chev', 18, 2.4) + '</button>').join('') + '</div>';
+}
+function sheetFicha(id) {
+  const orig = id ? fichaById(id) : null;
+  const d = orig ? clone(orig) : { id: uid('f'), nome: '', cat: 'Doces', status: 'teste', componentes: [{ nome: 'Massa', tipo: 'itens', itens: [] }], rendimentos: [], pesoPronto: null, modo: '', obs: '' };
+  d.rendimentos.forEach(r => { r.porUnidade = r.porUnidade || {}; });
+  openSheet({
+    title: orig ? 'Editar ficha técnica' : 'Nova ficha técnica', html: '',
+    onMount(api) {
+      const B = api.body;
+      const prepOpts = sel => DB.preparos.slice().sort(byNome).map(p => '<option value="' + p.id + '"' + (sel === p.id ? ' selected' : '') + '>' + esc(p.nome) + '</option>').join('');
+      const unOpts = sel => ['g', 'ml', 'un'].map(u => '<option' + (sel === u ? ' selected' : '') + '>' + u + '</option>').join('');
+      const draw = () => {
+        B.innerHTML = '<label class="fl">Nome do produto<input class="inp" data-in="ft" data-k="nome" value="' + esc(d.nome) + '" placeholder="Ex.: Pudim tradicional"></label>' +
+          '<div class="grid grid-cols-2 gap-2 mt-3"><label class="fl">Categoria<input class="inp inp-sm" data-in="ft" data-k="cat" value="' + esc(d.cat) + '"></label>' +
+          '<div class="fl">Status<div class="seg mt-1">' + [['teste', 'Em teste'], ['aprovada', 'Aprovada']].map(([v, t]) => '<button class="' + (d.status === v ? 'on' : '') + '" data-act="fst" data-v="' + v + '">' + t + '</button>').join('') + '</div></div></div>' +
+          '<div class="lbl mt-6">Receita original, por componente</div>' +
+          d.componentes.map((c, k) => '<div class="pline mt-2" style="padding:12px">' +
+            '<div class="flex gap-2 items-center"><input class="inp inp-sm flex-1" data-in="cn" data-k="' + k + '" value="' + esc(c.nome) + '" placeholder="Nome (ex.: Calda)" style="font-weight:800">' +
+            '<button class="iconbtn sm" data-act="crm" data-k="' + k + '" aria-label="Remover componente">' + ic('trash', 18) + '</button></div>' +
+            '<div class="flex items-center gap-3 mt-2"><div class="seg seg-sm flex-1">' + [['itens', 'Ingredientes'], ['preparo', 'Usar um preparo']].map(([v, t]) => '<button class="' + ((c.tipo || 'itens') === v ? 'on' : '') + '" data-act="ctp" data-k="' + k + '" data-v="' + v + '">' + t + '</button>').join('') + '</div>' +
+            '<label class="check" style="font-size:13.5px"><input type="checkbox" data-ch="copc" data-k="' + k + '"' + (c.opcional ? ' checked' : '') + '> opcional</label></div>' +
+            (c.tipo === 'preparo'
+              ? '<div class="grid gap-2 mt-2" style="grid-template-columns:1fr 110px"><select class="inp inp-sm" data-ch="cprep" data-k="' + k + '"><option value="">Escolha o preparo…</option>' + prepOpts(c.p) + '</select>' +
+                '<div class="relative"><input class="inp inp-sm" style="padding-right:38px" data-in="cfat" data-k="' + k + '" inputmode="decimal" value="' + nfIn(c.fator == null ? 1 : c.fator) + '" aria-label="Quantas receitas do preparo"><span class="suffix-sm">×</span></div></div>' +
+                '<p class="text-[12.5px] mt-1" style="color:var(--txt-2)">Quantas receitas do preparo entram em 1 receita desta ficha.</p>'
+              : (c.itens || []).map((it, j) => { const ins = insById(it.i);
+                  return '<div class="mt-2" style="border-top:1px dashed var(--linha);padding-top:8px"><div class="flex gap-2 items-center"><button class="pick flex-1" data-act="ipick" data-k="' + k + '" data-j="' + j + '"><span class="font-bold">' + esc(ins ? ins.nome : '(escolha)') + '</span>' + ic('chevd', 16, 2.4) + '</button>' +
+                    '<input class="inp inp-sm" style="width:92px" data-in="iq" data-k="' + k + '" data-j="' + j + '" inputmode="decimal" value="' + nfIn(it.q) + '" aria-label="Quantidade">' +
+                    '<select class="inp inp-sm" style="width:72px;padding:0 6px" data-ch="iu" data-k="' + k + '" data-j="' + j + '" aria-label="Unidade">' + unOpts(it.u || (ins ? ins.un : 'g')) + '</select>' +
+                    '<button class="iconbtn sm" data-act="irm" data-k="' + k + '" data-j="' + j + '" aria-label="Remover">' + ic('x', 16, 2.4) + '</button></div>' +
+                    '<div class="flex gap-2 items-center mt-1"><input class="inp inp-sm flex-1" style="min-height:40px;font-size:14px;font-weight:500" data-in="imed" data-k="' + k + '" data-j="' + j + '" value="' + esc(it.medida || '') + '" placeholder="Medida caseira (opcional, ex.: 2 xícaras)">' +
+                    (it.medida ? '<label class="check" style="font-size:13px"><input type="checkbox" data-ch="iconf" data-k="' + k + '" data-j="' + j + '"' + (it.conf ? ' checked' : '') + '> conferi o peso</label>' : '') + '</div></div>'; }).join('') +
+                '<button class="btn btn-sec w-full mt-2" style="min-height:44px" data-act="iadd" data-k="' + k + '">' + ic('plus', 18) + ' Ingrediente</button>') +
+            '<div id="fcp' + k + '" class="text-[13px] mt-2" style="color:var(--txt-2)"></div>' +
+            '<label class="fl mt-2" style="font-size:12.5px">Rendimento deste componente pronto (g, se medido)<input class="inp inp-sm" data-in="crend" data-k="' + k + '" inputmode="decimal" value="' + nfIn0(c.rend) + '" placeholder="opcional"></label></div>').join('') +
+          '<button class="btn btn-sec w-full mt-3" data-act="cnew">' + ic('plus') + ' Adicionar componente</button>' +
+          '<div id="fResumo" class="calc mt-4"></div>' +
+          '<label class="fl mt-4">Rendimento final medido da receita (g prontos, opcional)<input class="inp inp-sm" data-in="fpp" inputmode="decimal" value="' + nfIn0(d.pesoPronto) + '" placeholder="pese tudo depois de pronto"></label>' +
+          '<div class="lbl mt-6">Formas, embalagens e rendimento</div>' +
+          '<p class="text-[13px] mt-1" style="color:var(--txt-2)">Calibração: faça a receita, conte quantas unidades saíram nesta embalagem e anote aqui. Sem isso, o Diário só multiplica a receita.</p>' +
+          d.rendimentos.map((r, j) => '<div class="pline mt-2" style="padding:12px"><div class="flex gap-2 items-center"><select class="inp inp-sm flex-1" data-ch="remb" data-j="' + j + '">' +
+            DB.embalagens.map(e => '<option value="' + e.id + '"' + (r.emb === e.id ? ' selected' : '') + '>' + esc(e.nome) + '</option>').join('') + '</select>' +
+            '<button class="iconbtn sm" data-act="rrm" data-j="' + j + '" aria-label="Remover embalagem">' + ic('x', 16, 2.4) + '</button></div>' +
+            '<div class="grid grid-cols-2 gap-2 mt-2"><label class="fl">Receitas feitas no teste<input class="inp inp-sm" data-in="rtr" data-j="' + j + '" inputmode="decimal" value="' + nfIn((r.teste && r.teste.receitas) || 1) + '"></label>' +
+            '<label class="fl">Unidades que saíram<input class="inp inp-sm" data-in="rto" data-j="' + j + '" inputmode="decimal" value="' + nfIn0(r.teste && r.teste.obtidas) + '" placeholder="não calibrado"></label></div>' +
+            (d.componentes.length ? '<div class="text-[12.5px] font-bold mt-2" style="color:var(--txt-2)">Peso de cada componente por unidade (g, se medido)</div><div class="grid grid-cols-2 gap-2 mt-1">' +
+              d.componentes.map((c, k) => '<label class="fl" style="font-size:12px">' + esc(c.nome) + '<input class="inp inp-sm" data-in="rpu" data-j="' + j + '" data-k="' + k + '" inputmode="decimal" value="' + nfIn0(r.porUnidade[k]) + '"></label>').join('') + '</div>' : '') +
+            '<div id="frd' + j + '" class="calc mt-2"></div></div>').join('') +
+          '<button class="btn btn-sec w-full mt-2" data-act="radd">' + ic('plus') + ' Adicionar forma ou embalagem</button>' +
+          '<label class="fl mt-5">Modo de preparo<textarea class="inp" data-in="ft" data-k="modo" rows="4">' + esc(d.modo) + '</textarea></label>' +
+          '<label class="fl mt-3">Observações e pendências<textarea class="inp" data-in="ft" data-k="obs" rows="2">' + esc(d.obs) + '</textarea></label>' +
+          '<p id="fErr" class="err mt-2"></p><div class="flex gap-2 mt-2">' + (orig ? '<button class="btn btn-bad" data-act="fdel" aria-label="Excluir ficha">' + ic('trash') + '</button><button class="btn btn-out" data-act="fdup">Duplicar</button>' : '') +
+          '<button class="btn btn-pri flex-1" data-act="fsave">' + ic('check') + ' Salvar</button></div>';
+        calc();
+      };
+      // Contas da ficha (pesos e custos): só na administração
+      const calc = () => {
+        const grupos = Calc.expandirFicha(DB, d, 1);
+        const pesos = grupos.map(g => Calc.pesoTotal(g.linhas));
+        const tot = Calc.pesoTotal([].concat(...grupos.map(g => g.linhas)));
+        grupos.forEach((g, k) => { const el = $('#fcp' + k, B); if (!el) return; const cg = Calc.custoGrupos([g]);
+          el.innerHTML = g.linhas.length ? 'Peso cru: <b>' + nf(pesos[k].g, 1) + ' g</b>' + (tot.g > 0 ? ' (' + nf(pesos[k].g / tot.g * 100, 1) + '% da receita)' : '') + ' · custo <b>' + brl(cg.total) + '</b>' + (cg.pendentes.length ? ' (parcial)' : '') +
+            (pesos[k].pendente ? ' · <span style="color:var(--warn)">tem item sem conversão para g</span>' : '') : esc(g.avisos.join('; ')); });
+        const c = Calc.custoGrupos(grupos);
+        const rf = $('#fResumo', B);
+        if (rf) rf.innerHTML = 'Peso cru total: <b>' + nf(tot.g, 1) + ' g</b>' + (tot.pendente ? ' <span style="color:var(--warn)">(incompleto: falta densidade ou peso unitário de algum item)</span>' : '') +
+          '<br>Custo da receita original: <b>' + brl(c.total) + '</b>' + (c.pendentes.length ? '<br><span style="color:var(--warn)">Sem custo calculado: ' + c.pendentes.map(esc).join(', ') + '</span>' : '');
+        d.rendimentos.forEach((r, j) => { const el = $('#frd' + j, B); if (el) el.innerHTML = r.unidades > 0
+          ? 'Rende <b>' + nf(r.unidades, 2) + ' unidades</b> por receita · custo <b>' + brl(c.total / r.unidades) + '</b> por unidade' + (c.pendentes.length ? ' (parcial)' : '')
+          : '<span style="color:var(--warn);font-weight:700">Rendimento não calibrado</span>'; });
+      };
+      const comp = el => d.componentes[+el.dataset.k];
+      const item = el => comp(el).itens[+el.dataset.j];
+      const rend = el => d.rendimentos[+el.dataset.j];
+      const atualizaRend = r => { const t = r.teste || {}; r.unidades = t.receitas > 0 && t.obtidas > 0 ? t.obtidas / t.receitas : null; };
+      delegate(B, {
+        fst: el => { d.status = el.dataset.v; draw(); },
+        ctp: el => { const c = comp(el); c.tipo = el.dataset.v; if (c.tipo === 'preparo') { c.fator = c.fator == null ? 1 : c.fator; c.itens = c.itens || []; } draw(); },
+        crm: el => {
+          const k = +el.dataset.k, c = d.componentes[k];
+          if (((c.itens || []).length || c.p) && !confirm('Remover o componente "' + c.nome + '"?')) return;
+          d.componentes.splice(k, 1);
+          d.rendimentos.forEach(r => { const novo = {}; Object.keys(r.porUnidade).forEach(x => { const n = +x; if (n < k) novo[n] = r.porUnidade[x]; else if (n > k) novo[n - 1] = r.porUnidade[x]; }); r.porUnidade = novo; });
+          draw();
+        },
+        cnew: () => openCompPicker(c => { d.componentes.push(c); draw(); }),
+        iadd: el => { const c = comp(el); openPicker(true, r => { const ins = insById(r.slice(2)); c.itens = c.itens || []; c.itens.push({ i: r.slice(2), q: 0, u: ins ? ins.un : 'g' }); draw(); }); },
+        ipick: el => { const it = item(el); openPicker(true, r => { const ins = insById(r.slice(2)); it.i = r.slice(2); it.u = it.u || (ins ? ins.un : 'g'); draw(); }); },
+        irm: el => { comp(el).itens.splice(+el.dataset.j, 1); draw(); },
+        radd: () => {
+          if (!DB.embalagens.length) { toast('Cadastre antes em Formas e embalagens'); return; }
+          const livre = DB.embalagens.find(e => !d.rendimentos.some(r => r.emb === e.id)) || DB.embalagens[0];
+          d.rendimentos.push({ emb: livre.id, unidades: null, teste: null, porUnidade: {}, obs: '' }); draw();
+        },
+        rrm: el => { d.rendimentos.splice(+el.dataset.j, 1); draw(); },
+        fsave: () => {
+          if (!d.nome.trim()) { $('#fErr', B).textContent = 'Dê um nome à ficha.'; return; }
+          const embs = d.rendimentos.map(r => r.emb);
+          if (embs.some((e, i) => embs.indexOf(e) !== i)) { $('#fErr', B).textContent = 'A mesma embalagem aparece duas vezes. Deixe só uma.'; return; }
+          if (d.componentes.some(c => c.tipo === 'preparo' && !c.p)) { $('#fErr', B).textContent = 'Escolha o preparo de cada componente que usa preparo.'; return; }
+          d.nome = d.nome.trim();
+          d.componentes.forEach(c => { if (c.tipo !== 'preparo') c.itens = (c.itens || []).filter(it => it.i && it.q > 0).map(it => { const o = { i: it.i, q: it.q, u: it.u }; if ((it.medida || '').trim()) { o.medida = it.medida.trim(); o.conf = !!it.conf; } return o; }); c.nome = (c.nome || '').trim() || 'Componente'; });
+          d.pendente = !d.componentes.some(c => c.tipo === 'preparo' ? !!c.p : c.itens.length);
+          if (orig) Object.assign(orig, d); else DB.fichas.push(d);
+          save(); api.close(); toast('Ficha salva'); render();
+        },
+        fdup: () => { const c = clone(orig); c.id = uid('f'); c.nome = orig.nome + ' (cópia)'; DB.fichas.push(c); save(); api.close(); render(); sheetFicha(c.id); },
+        fdel: () => {
+          const usos = DB.produtos.filter(p => p.itens.some(l => l.r === 'f:' + orig.id)).map(p => p.nome);
+          if (usos.length) { alert('Esta ficha é usada em:\n• ' + usos.join('\n• ') + '\n\nTire-a desses produtos antes de excluir.'); return; }
+          if (!confirm('Excluir a ficha "' + orig.nome + '"?')) return;
+          DB.fichas = DB.fichas.filter(f => f !== orig); save(); api.close(); render();
+        }
+      }, {
+        ft: el => { d[el.dataset.k] = el.value; },
+        cn: el => { const c = comp(el); c.nome = el.value; if (c.cat) { const k = DB.componentesCat.find(x => x.id === c.cat); if (!k || k.nome !== c.nome.trim()) delete c.cat; } },
+        crend: el => { const c = comp(el), v = num(el.value); if (v > 0) c.rend = v; else delete c.rend; },
+        cfat: el => { comp(el).fator = num(el.value); calc(); },
+        iq: el => { item(el).q = num(el.value); calc(); },
+        imed: el => { const it = item(el); const tinha = !!it.medida; it.medida = el.value; if (!it.medida.trim()) delete it.conf; if (tinha !== !!it.medida.trim()) { draw(); const n = $('[data-in=imed][data-k="' + el.dataset.k + '"][data-j="' + el.dataset.j + '"]', B); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } } else calc(); },
+        fpp: el => { d.pesoPronto = num(el.value) || null; },
+        rtr: el => { const r = rend(el); r.teste = Object.assign({}, r.teste, { receitas: num(el.value), data: hojeISO() }); atualizaRend(r); calc(); },
+        rto: el => { const r = rend(el); r.teste = Object.assign({ receitas: 1 }, r.teste, { obtidas: num(el.value), data: hojeISO() }); atualizaRend(r); calc(); },
+        rpu: el => { const r = rend(el), v = num(el.value); if (v > 0) r.porUnidade[+el.dataset.k] = v; else delete r.porUnidade[+el.dataset.k]; }
+      }, {
+        copc: el => { comp(el).opcional = el.checked; },
+        cprep: el => { comp(el).p = el.value; calc(); },
+        iu: el => { item(el).u = el.value; calc(); },
+        iconf: el => { item(el).conf = el.checked; calc(); },
+        remb: el => { rend(el).emb = el.value; }
+      });
+      draw();
+    }
+  });
+}
+
+/* ================= COMPONENTES (lista reutilizável) ================= */
+// Janela "Adicionar componente": escolher da lista, reutilizar um preparo ou criar um novo nome
+function openCompPicker(cb) {
+  openSheet({
+    title: 'Adicionar componente',
+    html: '<div class="relative"><input class="inp inp-sm" style="padding-left:44px" data-in="busca" placeholder="Buscar componente ou preparo" aria-label="Buscar"><span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--txt-2)">' + ic('search', 20) + '</span></div>' +
+      '<div id="kpList" class="mt-3"></div>' +
+      '<div class="card mt-4" style="background:#FBF7F1;padding:14px"><div class="lbl">Criar componente novo</div>' +
+      '<input class="inp inp-sm mt-2" id="kNome" placeholder="Nome (ex.: Empanamento, Pesto, Espuma)">' +
+      '<select class="inp inp-sm mt-2" id="kArea">' + AREAS_COMP.map(a => '<option>' + a + '</option>').join('') + '</select>' +
+      '<label class="check mt-2" style="font-size:14px"><input type="checkbox" id="kSalvar" checked> Guardar na lista para usar em outras receitas</label>' +
+      '<p id="kErr" class="err mt-1"></p><button class="btn btn-pri w-full mt-1" data-act="criar">' + ic('plus') + ' Criar e adicionar</button></div>',
+    onMount(api) {
+      const B = api.body; let q = '';
+      const draw = () => {
+        const f = s => !q || norm(s).includes(norm(q));
+        const areas = [...new Set(AREAS_COMP.concat(DB.componentesCat.map(k => k.area)))];
+        const lista = areas.map(a => { const ks = DB.componentesCat.filter(k => k.area === a && f(k.nome));
+          return ks.length ? '<div class="lbl mt-3 mb-2">' + esc(a) + '</div><div class="flex flex-wrap gap-2">' + ks.map(k => '<button class="chip" data-act="pk" data-id="' + k.id + '">' + esc(k.nome) + '</button>').join('') + '</div>' : ''; }).join('');
+        const ps = DB.preparos.filter(p => f(p.nome)).sort(byNome);
+        $('#kpList', B).innerHTML = (lista || '') + (ps.length ? '<div class="lbl mt-5 mb-2">Reutilizar um preparo cadastrado</div>' +
+          '<p class="text-[12.5px] mb-2" style="color:var(--txt-2)">Molhos, cremes, massas e caldas: a receita fica num lugar só e vale para todas as fichas.</p>' +
+          ps.map(p => '<button class="pk" data-act="pp" data-id="' + p.id + '"><span>' + esc(p.nome) + '</span><small>preparo</small></button>').join('') : '') ||
+          '<p class="note">Nada encontrado. Crie um componente novo abaixo.</p>';
+      };
+      delegate(B, {
+        pk: el => { const k = DB.componentesCat.find(x => x.id === el.dataset.id); if (!k) return; api.close(); cb({ nome: k.nome, cat: k.id, tipo: 'itens', itens: [] }); },
+        pp: el => { const p = prepById(el.dataset.id); if (!p) return; api.close(); cb({ nome: p.nome, tipo: 'preparo', p: p.id, fator: 1 }); },
+        criar: () => {
+          const nome = $('#kNome', B).value.trim(), area = $('#kArea', B).value;
+          if (!nome) { $('#kErr', B).textContent = 'Digite o nome do componente.'; return; }
+          const c = { nome, tipo: 'itens', itens: [] };
+          if ($('#kSalvar', B).checked) {
+            let k = DB.componentesCat.find(x => norm(x.nome) === norm(nome) && x.area === area);
+            if (!k) { k = { id: uid('k'), nome, area }; DB.componentesCat.push(k); save(); }
+            c.cat = k.id;
+          }
+          api.close(); cb(c);
+        }
+      }, { busca: el => { q = el.value; draw(); } });
+      draw();
+    }
+  });
+}
+function admComp(m) {
+  const areas = [...new Set(AREAS_COMP.concat(DB.componentesCat.map(k => k.area)))];
+  m.innerHTML = '<button class="back" data-act="admMenu">' + ic('back', 20, 2.6) + ' Administração</button>' +
+    '<div class="flex items-center justify-between mt-1"><h2 class="h2">Componentes</h2><button class="btn btn-pri" style="min-height:46px" data-act="compNovo">' + ic('plus') + ' Novo</button></div>' +
+    '<p class="note mt-3">Lista de nomes para montar as fichas (massa, molho, xarope…). Cada receita guarda os próprios ingredientes: excluir um nome daqui nunca apaga nada das receitas.</p>' +
+    areas.map(a => { const ks = DB.componentesCat.filter(k => k.area === a); return ks.length ? '<div class="lbl mt-5 mb-1 px-1">' + esc(a) + '</div><div class="card" style="padding:4px 14px">' +
+      ks.map(k => { const n = Calc.dependenciasComponente(DB, k.id).length;
+        return '<button class="ins-row" data-act="compEdit" data-id="' + k.id + '"><div class="flex-1 min-w-0"><div class="font-bold">' + esc(k.nome) + '</div><div class="text-[13px]" style="color:var(--txt-2)">' + (n ? 'usado em ' + n + ' receita(s)' : 'ainda não usado') + '</div></div>' + ic('chev', 18, 2.4) + '</button>'; }).join('') + '</div>' : ''; }).join('');
+}
+function sheetCompCat(id) {
+  const orig = id ? DB.componentesCat.find(x => x.id === id) : null;
+  const d = orig ? clone(orig) : { id: uid('k'), nome: '', area: 'Outras' };
+  const deps = orig ? Calc.dependenciasComponente(DB, orig.id) : [];
+  openSheet({
+    title: orig ? 'Editar componente' : 'Novo componente',
+    html: '<label class="fl">Nome<input class="inp" id="kcNome" value="' + esc(d.nome) + '" placeholder="Ex.: Molho, Empanamento, Xarope"></label>' +
+      '<label class="fl mt-3">Área<select class="inp inp-sm" id="kcArea">' + [...new Set(AREAS_COMP.concat(d.area))].map(a => '<option' + (a === d.area ? ' selected' : '') + '>' + esc(a) + '</option>').join('') + '</select></label>' +
+      (deps.length ? '<div class="lbl mt-5">Usado em</div><ul class="ul mt-1">' + deps.map(f => '<li class="li"><span>' + esc(f.nome) + '</span></li>').join('') + '</ul>' : '') +
+      '<p id="kcErr" class="err mt-2"></p><div class="flex gap-2 mt-2">' + (orig ? '<button class="btn btn-bad" data-act="del" aria-label="Excluir componente">' + ic('trash') + '</button>' : '') +
+      '<button class="btn btn-pri flex-1" data-act="save">' + ic('check') + ' Salvar</button></div>',
+    onMount(api) {
+      const B = api.body;
+      delegate(B, {
+        save: () => {
+          const nome = $('#kcNome', B).value.trim(), area = $('#kcArea', B).value;
+          if (!nome) { $('#kcErr', B).textContent = 'Digite o nome.'; return; }
+          if (orig) {
+            if (nome !== orig.nome && deps.length && !confirm('Renomear para "' + nome + '" também nas ' + deps.length + ' receita(s) que usam este componente?\n\nOs ingredientes não mudam.')) return;
+            orig.area = area;
+            if (nome !== orig.nome) Calc.renomearComponente(DB, orig.id, nome);
+          } else DB.componentesCat.push({ id: d.id, nome, area });
+          save(); api.close(); toast('Componente salvo'); render();
+        },
+        del: () => {
+          const msg = deps.length
+            ? '"' + orig.nome + '" é usado em ' + deps.length + ' receita(s).\n\nElas continuam com o componente e todos os ingredientes; ele só sai desta lista.\n\nExcluir da lista?'
+            : 'Excluir "' + orig.nome + '" da lista?';
+          if (!confirm(msg)) return;
+          Calc.excluirComponenteCat(DB, orig.id); save(); api.close(); toast('Removido da lista'); render();
+        }
+      });
+    }
+  });
+}
+
+/* ================= FORMAS E EMBALAGENS (Admin) ================= */
+const usosEmb = id => DB.fichas.filter(f => (f.rendimentos || []).some(r => r.emb === id));
+function admEmb(m) {
+  m.innerHTML = '<button class="back" data-act="admMenu">' + ic('back', 20, 2.6) + ' Administração</button>' +
+    '<div class="flex items-center justify-between mt-1"><h2 class="h2">Formas e embalagens</h2><button class="btn btn-pri" style="min-height:46px" data-act="embNova">' + ic('plus') + ' Nova</button></div>' +
+    '<p class="note mt-3">O volume da embalagem não diz quanto pesa a sobremesa. O rendimento de cada receita em cada embalagem é registrado na ficha técnica, depois de um teste.</p>' +
+    '<div class="card mt-3" style="padding:4px 14px">' + DB.embalagens.map(e => { const u = usosEmb(e.id);
+      return '<button class="ins-row" data-act="embEdit" data-id="' + e.id + '"><div class="flex-1 min-w-0"><div class="font-bold">' + esc(e.nome) + '</div><div class="text-[13px]" style="color:var(--txt-2)">' +
+        esc([e.formato, e.dim, e.cap ? nf(e.cap, 1) + ' ml' : ''].filter(Boolean).join(' · ') || 'sem detalhes') + (u.length ? ' · usada em ' + u.length + ' ficha(s)' : '') + '</div></div>' + ic('chev', 18, 2.4) + '</button>'; }).join('') + '</div>';
+}
+function sheetEmb(id) {
+  const orig = id ? embById(id) : null;
+  const d = orig ? clone(orig) : { id: uid('e'), nome: '', formato: '', dim: '', cap: null, obs: '' };
+  const usos = orig ? usosEmb(orig.id) : [];
+  openSheet({
+    title: orig ? 'Editar embalagem' : 'Nova forma ou embalagem',
+    html: '<label class="fl">Nome e identificação<input class="inp" data-in="t" data-k="nome" value="' + esc(d.nome) + '" placeholder="Ex.: Pote de pudim 120 ml"></label>' +
+      '<label class="fl mt-3">Formato<input class="inp inp-sm" data-in="t" data-k="formato" value="' + esc(d.formato) + '" placeholder="Ex.: forma redonda, assadeira, pote"></label>' +
+      '<div class="grid grid-cols-2 gap-2 mt-3"><label class="fl">Dimensões<input class="inp inp-sm" data-in="t" data-k="dim" value="' + esc(d.dim) + '" placeholder="Ex.: 30 × 30 cm"></label>' +
+      '<label class="fl">Capacidade (ml)<input class="inp inp-sm" data-in="n" data-k="cap" inputmode="decimal" value="' + nfIn0(d.cap) + '" placeholder="se souber"></label></div>' +
+      '<label class="fl mt-3">Observação<textarea class="inp" data-in="t" data-k="obs" rows="2">' + esc(d.obs) + '</textarea></label>' +
+      (usos.length ? '<div class="lbl mt-5">Receitas nesta embalagem</div><ul class="ul mt-1">' + usos.map(f => { const r = f.rendimentos.find(x => x.emb === orig.id);
+        return '<li class="li"><span>' + esc(f.nome) + '</span><b>' + (r && r.unidades > 0 ? nf(r.unidades, 2) + ' un por receita' : '<span style="color:var(--warn)">não calibrado</span>') + '</b></li>'; }).join('') + '</ul>' : '') +
+      '<p id="eErr" class="err mt-2"></p><div class="flex gap-2 mt-2">' + (orig ? '<button class="btn btn-bad" data-act="del" aria-label="Excluir embalagem">' + ic('trash') + '</button>' : '') +
+      '<button class="btn btn-pri flex-1" data-act="save">' + ic('check') + ' Salvar</button></div>',
+    onMount(api) {
+      const B = api.body;
+      delegate(B, {
+        save: () => {
+          if (!d.nome.trim()) { $('#eErr', B).textContent = 'Dê um nome.'; return; }
+          d.nome = d.nome.trim(); d.cap = d.cap > 0 ? d.cap : null;
+          if (orig) Object.assign(orig, d); else DB.embalagens.push(d);
+          save(); api.close(); toast('Embalagem salva'); render();
+        },
+        del: () => {
+          if (usos.length) { alert('Esta embalagem está nas fichas:\n• ' + usos.map(f => f.nome).join('\n• ') + '\n\nTire-a dessas fichas antes de excluir.'); return; }
+          if (!confirm('Excluir "' + orig.nome + '"?')) return;
+          DB.embalagens = DB.embalagens.filter(e => e !== orig); save(); api.close(); render();
+        }
+      }, { t: el => { d[el.dataset.k] = el.value; }, n: el => { d[el.dataset.k] = num(el.value); } });
+    }
+  });
+}
+
+/* ================= PREÇOS → RECEITAS ================= */
+function pcReceitas(el) {
+  el.innerHTML = '<p class="note">Custo calculado pelos ingredientes da receita original. O custo por unidade aparece quando o rendimento da embalagem estiver calibrado.</p>' +
+    '<div class="grid gap-2 mt-3">' + DB.fichas.slice().sort(byNome).map(f => {
+      const c = Calc.custoFicha(DB, f, 1);
+      const semReceita = !(f.componentes || []).some(x => x.tipo === 'preparo' ? !!x.p : (x.itens || []).length);
+      if (semReceita) return '<button class="pr-row" style="display:block" data-act="fichaEdit" data-id="' + f.id + '"><div class="flex justify-between gap-2"><span class="font-extrabold text-[15.5px]">' + esc(f.nome) + '</span><span class="badge warn">aguardando receita</span></div></button>';
+      const rs = (f.rendimentos || []).map(r => { const e = embById(r.emb); return e ? '<div class="flex justify-between gap-2 text-[13.5px] mt-1"><span>' + esc(e.nome) + '</span><b>' + (r.unidades > 0 ? brl(c.total / r.unidades) + '/un' : '<span style="color:var(--warn)">não calibrado</span>') + '</b></div>' : ''; }).join('');
+      return '<button class="pr-row" style="display:block" data-act="fichaEdit" data-id="' + f.id + '"><div class="flex justify-between gap-2"><span class="font-extrabold text-[15.5px]">' + esc(f.nome) + '</span><b>' + brl(c.total) + '</b></div>' +
+        '<div class="text-[12.5px]" style="color:var(--txt-2)">receita original' + (c.pendentes.length ? ' · <span style="color:var(--warn)">sem custo: ' + esc(c.pendentes.join(', ')) + '</span>' : '') + '</div>' + rs + '</button>';
+    }).join('') + '</div>' +
+    '<p class="note mt-3">Para usar no preço de venda: em Administração → Produtos do cardápio, adicione a ficha técnica na composição do produto.</p>';
+}
+
+/* ================= CHECKLIST: enviar no grupo ================= */
+function textoChk(c) {
+  const st = chkStore(c.id);
+  let t = '*Checklist ' + c.codigo + ' — ' + c.titulo + '*\n' + new Date().toLocaleDateString('pt-BR') + ' · ' + (chkResp() || 'sem nome') + '\n' +
+    (st.concl ? 'Concluído às ' + st.concl.hora : 'Não concluído') + ' · ' + chkCount(c, st) + ' de ' + chkTotal(c) + ' itens\n';
+  c.items.forEach((it, i) => {
+    if (it.tipo === 'sec') t += '\n_' + it.t + '_\n';
+    else if (it.tipo === 'ok') t += (st.feitos[i] ? '✅ ' : '⬜ ') + it.t + '\n';
+    else { const v = String(st.vals[i] || '').trim(); t += (v ? '✅ ' : '⬜ ') + it.t + ': ' + (v ? v + (it.un ? ' ' + it.un : '') : 'não anotado') + '\n'; }
+  });
+  return t.trim();
+}
+function baixarImgChk(c) {
+  const st = chkStore(c.id), W = 1080, P = 64;
+  const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
+  const fonte = (peso, tam) => peso + ' ' + tam + 'px "Plus Jakarta Sans", system-ui, sans-serif';
+  const estilo = { titulo: [fonte(800, 46), 58, '#4A3319'], sub: [fonte(600, 30), 42, '#7A6450'], sec: [fonte(800, 26), 38, '#8C6239'], item: [fonte(500, 30), 42, '#4A3319'], rodape: [fonte(600, 24), 34, '#A8937D'] };
+  const quebra = (txt, f, larg) => { ctx.font = f; const out = []; let l = ''; String(txt).split(' ').forEach(w => { const t = l ? l + ' ' + w : w; if (ctx.measureText(t).width > larg && l) { out.push(l); l = w; } else l = t; }); if (l) out.push(l); return out; };
+  const blocos = [
+    { tipo: 'titulo', txt: c.codigo + ' · ' + c.titulo },
+    { tipo: 'sub', txt: new Date().toLocaleDateString('pt-BR') + ' · ' + (chkResp() || 'sem nome') },
+    { tipo: 'sub', txt: (st.concl ? 'Concluído às ' + st.concl.hora : 'Não concluído') + ' · ' + chkCount(c, st) + ' de ' + chkTotal(c) + ' itens' }
+  ];
+  c.items.forEach((it, i) => {
+    if (it.tipo === 'sec') blocos.push({ tipo: 'sec', txt: it.t.toUpperCase() });
+    else if (it.tipo === 'ok') blocos.push({ tipo: 'item', ok: !!st.feitos[i], txt: it.t });
+    else { const v = String(st.vals[i] || '').trim(); blocos.push({ tipo: 'item', ok: !!v, txt: it.t + ': ' + (v ? v + (it.un ? ' ' + it.un : '') : 'não anotado') }); }
+  });
+  blocos.push({ tipo: 'rodape', txt: 'Balayó Café · enviado pelo app' });
+  let h = P + 10;
+  const plano = blocos.map(b => { const [f, lh] = estilo[b.tipo]; const ls = quebra(b.txt, f, W - 2 * P - (b.tipo === 'item' ? 60 : 0)); const topo = b.tipo === 'sec' ? 28 : b.tipo === 'item' ? 12 : b.tipo === 'rodape' ? 36 : 0; h += topo + ls.length * lh; return { b, ls, topo, f, lh }; });
+  h += P;
+  cv.width = W; cv.height = h;
+  ctx.fillStyle = '#FCFBFA'; ctx.fillRect(0, 0, W, h);
+  ctx.fillStyle = '#B08D46'; ctx.fillRect(0, 0, W, 10);
+  ctx.textBaseline = 'top';
+  let y = P + 10;
+  plano.forEach(p => {
+    y += p.topo; ctx.font = p.f; ctx.fillStyle = estilo[p.b.tipo][2];
+    if (p.b.tipo === 'item') {
+      const by = y + 4, s = 34;
+      ctx.lineWidth = 4; ctx.strokeStyle = p.b.ok ? '#2F7A4A' : '#B23A2B';
+      if (p.b.ok) { ctx.fillStyle = '#2F7A4A'; ctx.fillRect(P, by, s, s); ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(P + 8, by + 18); ctx.lineTo(P + 15, by + 26); ctx.lineTo(P + 27, by + 9); ctx.stroke(); }
+      else ctx.strokeRect(P + 2, by + 2, s - 4, s - 4);
+      ctx.fillStyle = p.b.ok ? '#4A3319' : '#B23A2B';
+      p.ls.forEach((l, i) => ctx.fillText(l, P + 60, y + i * p.lh));
+    } else p.ls.forEach((l, i) => ctx.fillText(l, P, y + i * p.lh));
+    y += p.ls.length * p.lh;
+  });
+  cv.toBlob(async blob => {
+    if (!blob) { toast('Não consegui gerar a imagem'); return; }
+    const nome = 'checklist-' + c.codigo + '-' + hojeISO() + '.png';
+    try {
+      const file = new File([blob], nome, { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: c.codigo + ' ' + c.titulo }); return; }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    toast('Imagem salva');
+  }, 'image/png');
+}
+
 /* ================= AÇÕES DA TELA PRINCIPAL ================= */
 const VIEWS = { prop: vProp, cru: vCru, dia: vDia, bar: vBar, chk: vChk, preco: vPreco, admin: vAdmin };
 const abrirAdmin = then => {
@@ -1903,7 +2503,16 @@ const abrirAdmin = then => {
   if (adminOk()) fn(); else askAdmin(fn);
 };
 const ACT = {
-  admin: () => { if (UI.tab === 'admin') go(UI.voltar || 'prop'); else abrirAdmin(); },
+  admin: () => { if (UI.tab === 'admin') go(UI.voltar || 'dia'); else abrirAdmin(); },
+  // Diário: calcular receita
+  diaModo: el => { UI.dia.modo = el.dataset.v; render(); },
+  recModo: el => { UI.rec.modo = el.dataset.v; vDiaRec($('#diaBody')); },
+  recMult: el => { UI.rec.mult = +el.dataset.v; vDiaRec($('#diaBody')); },
+  recCopy: () => { const t = textoRec(); if (t) copiar(t); },
+  recWa: () => { const t = textoRec(); if (t) abrirWhats(t); },
+  // Ferramentas antigas (continuam disponíveis pelo Admin)
+  goProp: () => go('prop'),
+  goCru: () => go('cru'),
   goSeg: () => abrirAdmin(() => sheetSenha(DB.config.pinPadrao ? 'pin' : 'adm')),
   // Proporções
   pTotal: el => { UI.prop.total = +el.dataset.v; $('#pTotalIn').value = nfIn(UI.prop.total); updProp(); },
@@ -1959,8 +2568,8 @@ const ACT = {
     const c = DB.config, keep = { pinHash: c.pinHash, pinLen: c.pinLen, adminHash: c.adminHash, pinPadrao: c.pinPadrao, adminPadrao: c.adminPadrao };
     DB = seedDB(); Object.assign(DB.config, keep); save(); UI.prop.pcts = clone(DB.config.props); toast('Dados originais restaurados'); render();
   },
-  admLock: () => { store.del(SS_ADMIN, true); go(UI.voltar || 'prop'); toast('Saiu do modo administrador'); },
-  appLock: () => { store.del(SS_ADMIN, true); store.del(LS_UNLOCK); UI.tab = 'prop'; showLock(); }
+  admLock: () => { store.del(SS_ADMIN, true); go(UI.voltar || 'dia'); toast('Saiu do modo administrador'); },
+  appLock: () => { store.del(SS_ADMIN, true); store.del(LS_UNLOCK); UI.tab = 'dia'; showLock(); }
 };
 const IN = {
   pTotal: el => { UI.prop.total = num(el.value); updProp(); },
@@ -2000,6 +2609,27 @@ Object.assign(ACT, {
   }
 });
 Object.assign(IN, { chkResp: el => store.set('balayo_chk_resp', el.value) });
+// Fichas técnicas, embalagens e a tela "Calcular receita"
+Object.assign(ACT, {
+  admFichas: () => { UI.admin.sub = 'fichas'; render(); window.scrollTo(0, 0); },
+  admEmb: () => { UI.admin.sub = 'emb'; render(); window.scrollTo(0, 0); },
+  fichaNova: () => sheetFicha(null),
+  fichaEdit: el => sheetFicha(el.dataset.id),
+  admComp: () => { UI.admin.sub = 'comp'; render(); window.scrollTo(0, 0); },
+  compNovo: () => sheetCompCat(null),
+  compEdit: el => sheetCompCat(el.dataset.id),
+  embNova: () => sheetEmb(null),
+  embEdit: el => sheetEmb(el.dataset.id)
+});
+Object.assign(IN, {
+  recMult: el => { const v = num(el.value); UI.rec.mult = v > 0 ? v : 1; $$('[data-act=recMult]').forEach(b => b.classList.toggle('on', !el.value.trim() && +b.dataset.v === UI.rec.mult)); updRec(); },
+  recQtd: el => { UI.rec.qtd = el.value; updRec(); }
+});
+Object.assign(CH, {
+  recRef: el => { UI.rec.ref = el.value; UI.rec.excl = []; UI.rec.qtd = ''; vDiaRec($('#diaBody')); },
+  recEmb: el => { UI.rec.emb = el.value; updRec(); },
+  recOpc: el => { const k = +el.dataset.k; UI.rec.excl = el.checked ? UI.rec.excl.filter(x => x !== k) : UI.rec.excl.concat(k); updRec(); }
+});
 
 /* ================= INÍCIO ================= */
 montarCasca();
@@ -2014,7 +2644,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('visibilitychange', () => { if (!document.hidden && needsUnlock() && $('#lock').classList.contains('hidden')) showLock(); });
 
 const tabSalva = store.get(SS_TAB, true), tabHash = (location.hash.match(/^#(prop|cru|dia|bar|chk|preco)$/) || [])[1];
-UI.tab = tabHash || (VIEWS[tabSalva] && tabSalva !== 'admin' ? tabSalva : 'prop');
+UI.tab = tabHash || (VIEWS[tabSalva] && tabSalva !== 'admin' ? tabSalva : 'dia');
 render();
 if (needsUnlock()) showLock();
 window.addEventListener('online', enviarPendentes);

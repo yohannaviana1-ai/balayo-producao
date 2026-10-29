@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Testes — cálculos Balayó</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:#FCFBFA;color:#4A3319}
+h1{font-size:20px}.ok{color:#2F7A4A}.fail{color:#B23A2B;font-weight:700}
+li{margin:6px 0;line-height:1.4}small{color:#7A6450}
+</style>
+<script src="calculos.js?v=4"></script>
+</head>
+<body>
+<h1>Testes dos cálculos das fichas técnicas</h1>
+<p id="resumo">Rodando…</p>
+<ol id="lista"></ol>
+<script>
+(function () {
+  'use strict';
+  const C = window.BalayoCalc;
+  const resultados = [];
+  const perto = (a, b) => Math.abs(a - b) < 1e-9;
+  function teste(nome, fn) {
+    try { const msg = fn(); resultados.push({ nome, ok: true, msg: msg || '' }); }
+    catch (e) { resultados.push({ nome, ok: false, msg: e.message }); }
+  }
+  function confere(cond, msg) { if (!cond) throw new Error(msg); }
+  const copia = o => JSON.parse(JSON.stringify(o));
+
+  // Dados de teste. Os rendimentos 13 e 20 são fictícios, só para testar a conta.
+  const db = {
+    insumos: [
+      { id: 'leite', nome: 'Leite integral', un: 'ml', qtd: 1000, preco: 6, dens: 1.03 },
+      { id: 'leite_sd', nome: 'Leite sem densidade', un: 'ml', qtd: 1000, preco: 6 },
+      { id: 'ovos', nome: 'Ovos', un: 'un', qtd: 30, preco: 24, pesoUn: 50, pesoUnConf: true },
+      { id: 'gema', nome: 'Gema', un: 'g', qtd: 1000, preco: 0 },
+      { id: 'baunilha', nome: 'Baunilha', un: 'ml', qtd: 30, preco: 30, dens: 1 },
+      { id: 'creme', nome: 'Creme de leite fresco', un: 'ml', qtd: 1000, preco: 30, dens: 1 },
+      { id: 'lc', nome: 'Leite condensado', un: 'g', qtd: 395, preco: 6.5 },
+      { id: 'acucar', nome: 'Açúcar', un: 'g', qtd: 1000, preco: 5 },
+      { id: 'agua', nome: 'Água', un: 'ml', qtd: 1000, preco: 0, zero: true, dens: 1 },
+      { id: 'cl', nome: 'Creme de leite caixinha', un: 'g', qtd: 200, preco: 3.2 },
+      { id: 'choc', nome: 'Chocolate ao leite', un: 'g', qtd: 1000, preco: 60 }
+    ],
+    preparos: [
+      { id: 'calda', nome: 'Calda de caramelo', un: 'g', perda: null, itens: [{ i: 'acucar', q: 200 }, { i: 'agua', q: 60 }], calib: { antes: 260, depois: 221 } },
+      { id: 'brig', nome: 'Brigadeiro', un: 'g', perda: 40, itens: [{ i: 'lc', q: 395 }, { i: 'cl', q: 100 }, { i: 'choc', q: 100 }] },
+      { id: 'novo', nome: 'Preparo novo', un: 'g', perda: null, itens: [{ i: 'acucar', q: 100 }] }
+    ],
+    fichas: [{
+      id: 'pudim', nome: 'Pudim tradicional',
+      componentes: [
+        { nome: 'Creme', tipo: 'itens', itens: [{ i: 'leite', q: 620, u: 'g' }, { i: 'ovos', q: 4, u: 'un' }, { i: 'gema', q: 75, u: 'g' }, { i: 'baunilha', q: 5, u: 'g' }, { i: 'creme', q: 160, u: 'g' }, { i: 'lc', q: 395, u: 'g' }] },
+        { nome: 'Calda', opcional: true, tipo: 'preparo', p: 'calda', fator: 1 }
+      ],
+      rendimentos: [{ emb: 'e120', unidades: 13 }, { emb: 'e90', unidades: 20 }, { emb: 'e200', unidades: null }]
+    }]
+  };
+  const pudim = db.fichas[0];
+  const base = [620, 4, 75, 5, 160, 395];
+
+  teste('1. Dobrar a receita: cada ingrediente fica exatamente o dobro (inclusive a calda)', () => {
+    const g = C.expandirFicha(db, pudim, 2);
+    g[0].linhas.forEach((l, k) => confere(l.q === base[k] * 2, l.nome + ': esperado ' + base[k] * 2 + ', veio ' + l.q));
+    confere(g[0].linhas.map(l => l.q).join(',') === '1240,8,150,10,320,790', 'lista do creme diferente do exemplo');
+    confere(g[1].nome === 'Calda' && g[1].linhas[0].q === 400 && g[1].linhas[1].q === 120, 'calda não dobrou');
+    return 'Creme: ' + g[0].linhas.map(l => l.q).join(' / ') + ' · Calda: ' + g[1].linhas.map(l => l.q).join(' / ');
+  });
+  teste('2. Multiplicar por 0,5', () => {
+    const g = C.expandirFicha(db, pudim, 0.5);
+    g[0].linhas.forEach((l, k) => confere(l.q === base[k] * 0.5, l.nome + ' errado'));
+    return g[0].linhas.map(l => l.q).join(' / ');
+  });
+  teste('3. Produzir 30 unidades com rendimento calibrado (13 por receita, fictício)', () => {
+    const m = C.multPorUnidades(pudim, 'e120', 30);
+    confere(m.ok && perto(m.mult, 30 / 13), 'multiplicador errado');
+    const g = C.expandirFicha(db, pudim, m.mult);
+    confere(perto(g[0].linhas[0].q, 620 * 30 / 13), 'leite errado');
+    confere(perto(g[0].linhas[1].q, 4 * 30 / 13), 'ovos errado');
+    confere(perto(g[0].linhas[1].g, 4 * 30 / 13 * 50), 'peso dos ovos errado');
+    return 'leite ' + g[0].linhas[0].q.toFixed(4) + ' g · ovos ' + g[0].linhas[1].q.toFixed(4) + ' un = ' + g[0].linhas[1].g.toFixed(2) + ' g (sem arredondar)';
+  });
+  teste('4. Trocar a embalagem usa o rendimento dela', () => {
+    const a = C.multPorUnidades(pudim, 'e120', 30), b = C.multPorUnidades(pudim, 'e90', 30);
+    confere(perto(b.mult, 1.5) && !perto(a.mult, b.mult), 'não trocou o rendimento');
+    confere(C.expandirFicha(db, pudim, b.mult)[0].linhas[0].q === 930, 'leite com a outra embalagem deveria ser 930');
+    return 'pote 120: ×' + a.mult.toFixed(4) + ' · pote 90: ×' + b.mult;
+  });
+  teste('5. Sem rendimento calibrado: avisa e não inventa', () => {
+    const a = C.multPorUnidades(pudim, 'e200', 30), b = C.multPorUnidades(pudim, 'nao-existe', 30), c = C.multPorPronto(db, db.preparos[2], 500);
+    confere(!a.ok && a.motivo === 'Rendimento não calibrado', 'deveria bloquear embalagem sem rendimento');
+    confere(!b.ok, 'deveria bloquear embalagem inexistente');
+    confere(!c.ok && c.motivo === 'Rendimento não calibrado', 'preparo novo sem perda medida não pode usar perda genérica');
+    confere(!C.custoPorUnidade(db, pudim, 'e200').ok, 'custo por unidade sem rendimento deveria ser bloqueado');
+    return a.motivo;
+  });
+  teste('6. Cru × pronto: perda medida e peso pronto desejado', () => {
+    const rc = C.rendimentoPreparo(db, db.preparos[0]);
+    confere(rc.fonte === 'medido' && perto(rc.perda, 1 - 221 / 260) && perto(rc.prontoBase, 221), 'calda medida errada');
+    const rb = C.rendimentoPreparo(db, db.preparos[1]);
+    confere(rb.cruBase === 595 && perto(rb.prontoBase, 357), 'brigadeiro: 595 g cru deveriam render 357 g');
+    const m = C.multPorPronto(db, db.preparos[1], 800);
+    confere(m.ok && perto(m.mult, 800 / 357), 'multiplicador do brigadeiro errado');
+    confere(perto(C.linhasPreparo(db, db.preparos[1], m.mult)[0].q, 395 * 800 / 357), 'leite condensado errado');
+    return 'calda perde ' + (rc.perda * 100).toFixed(2) + '% · brigadeiro 800 g pronto = ×' + m.mult.toFixed(4);
+  });
+  teste('7. Custos acompanham a quantidade usada', () => {
+    const c1 = C.custoFicha(db, pudim, 1), c2 = C.custoFicha(db, pudim, 2);
+    confere(perto(c2.total, 2 * c1.total), 'custo de 2× não é o dobro');
+    confere(c1.pendentes.indexOf('Gema') >= 0, 'gema sem preço deveria aparecer como pendente');
+    const leite = C.linhaInsumo(db, { i: 'leite', q: 620, u: 'g' }, 1);
+    confere(perto(leite.custo, 620 / 1.03 * 6 / 1000), 'custo do leite em g→ml errado');
+    const sd = C.linhaInsumo(db, { i: 'leite_sd', q: 100, u: 'g' }, 1);
+    confere(sd.custo === null && sd.avisos.some(a => a.indexOf('conversão') >= 0), 'sem densidade não pode supor 1 ml = 1 g');
+    const ml = C.linhaInsumo(db, { i: 'leite_sd', q: 100, u: 'ml' }, 1);
+    confere(ml.g === null, 'ml sem densidade não pode virar grama');
+    const cu = C.custoPorUnidade(db, pudim, 'e120');
+    confere(cu.ok && perto(cu.valor, c1.total / 13), 'custo por unidade errado');
+    const semCalda = C.custoFicha(db, pudim, 1, [1]);
+    confere(semCalda.total < c1.total, 'tirar a calda deveria baixar o custo');
+    return 'receita 1× R$ ' + c1.total.toFixed(4) + ' · 2× R$ ' + c2.total.toFixed(4) + ' · por pudim R$ ' + cu.valor.toFixed(4);
+  });
+  teste('8. Migração preserva os dados que já existem', () => {
+    const antigo = {
+      insumos: [{ id: 'leite', nome: 'Leite', un: 'ml', qtd: 1000, preco: 7.49 }],
+      preparos: [{ id: 'brig', nome: 'Brigadeiro editado', perda: 38, itens: [{ i: 'leite', q: 1 }] }],
+      produtos: [{ id: 'x1', nome: 'Produto meu', itens: [{ r: 'i:leite', q: 10 }], preco: 12 }],
+      checklists: [{ id: 'c1', titulo: 'Meu checklist', items: [{ t: 'a', tipo: 'ok' }] }]
+    };
+    const antes = copia(antigo);
+    const sementes = { insumos: [{ id: 'gema', nome: 'Gema' }, { id: 'leite', nome: 'NÃO PODE SOBRESCREVER' }], fichas: [{ id: 'f1', nome: 'Ficha nova' }], embalagens: [{ id: 'e1', nome: 'Pote' }], preparos: [{ id: 'brig', nome: 'NÃO PODE SOBRESCREVER' }] };
+    const db2 = C.migrar(copia(antigo), sementes);
+    confere(JSON.stringify(db2.insumos[0]) === JSON.stringify(antes.insumos[0]), 'insumo existente foi alterado');
+    confere(JSON.stringify(db2.preparos) === JSON.stringify(antes.preparos), 'preparo existente foi alterado');
+    confere(JSON.stringify(db2.produtos) === JSON.stringify(antes.produtos), 'produto foi alterado');
+    confere(JSON.stringify(db2.checklists) === JSON.stringify(antes.checklists), 'checklist foi alterado');
+    confere(db2.insumos.length === 2 && db2.fichas.length === 1 && db2.embalagens.length === 1, 'novos itens não entraram');
+    C.migrar(db2, sementes);
+    confere(db2.insumos.length === 2 && db2.fichas.length === 1, 'rodar de novo duplicou itens');
+    db2.fichas = [];
+    C.migrar(db2, sementes);
+    confere(db2.fichas.length === 0, 'ficha apagada pelo dono voltou sozinha');
+    return 'dados antigos intactos; novos itens adicionados uma vez só';
+  });
+  teste('Extra: ovos fracionados e aviso de peso médio não confirmado', () => {
+    const db3 = copia(db); db3.insumos.find(i => i.id === 'ovos').pesoUnConf = false;
+    const l = C.linhaInsumo(db3, { i: 'ovos', q: 4 * 30 / 13, u: 'un' }, 1);
+    confere(perto(l.g, 4 * 30 / 13 * 50) && l.avisos.indexOf('peso médio a confirmar') >= 0, 'faltou aviso do peso médio');
+    const m = C.linhaInsumo(db, { i: 'acucar', q: 240, u: 'g', medida: '2 xícaras' }, 1);
+    confere(m.avisos.indexOf('medida caseira a confirmar') >= 0, 'medida caseira sem confirmação deveria avisar');
+    return l.q.toFixed(4) + ' ovos = ' + l.g.toFixed(2) + ' g';
+  });
+
+  // ---- Componentes personalizados (sanduíche, bebida) e preparo reaproveitado ----
+  const db2 = copia(db);
+  db2.insumos.push({ id: 'pao', nome: 'Ciabatta', un: 'un', qtd: 10, preco: 20 }, { id: 'file', nome: 'Filé', un: 'g', qtd: 1000, preco: 80 },
+    { id: 'queijo', nome: 'Queijo', un: 'g', qtd: 1000, preco: 50 }, { id: 'tomate', nome: 'Tomate', un: 'g', qtd: 1000, preco: 8 }, { id: 'cafe', nome: 'Café', un: 'g', qtd: 1000, preco: 90 });
+  db2.preparos.push({ id: 'molho', nome: 'Molho da casa', un: 'g', perda: null, itens: [{ i: 'creme', q: 200, u: 'ml' }, { i: 'tomate', q: 100 }] });
+  db2.componentesCat = [{ id: 'k_molho', nome: 'Molho', area: 'Sanduíches' }, { id: 'k_prot', nome: 'Proteína', area: 'Sanduíches' }];
+  db2.fichas.push(
+    { id: 'sand', nome: 'Ciabatta de filé', componentes: [
+      { nome: 'Pão', tipo: 'itens', itens: [{ i: 'pao', q: 1, u: 'un' }] },
+      { nome: 'Proteína', cat: 'k_prot', tipo: 'itens', itens: [{ i: 'file', q: 90, u: 'g' }] },
+      { nome: 'Queijo', tipo: 'itens', itens: [{ i: 'queijo', q: 30, u: 'g' }] },
+      { nome: 'Molho', cat: 'k_molho', tipo: 'preparo', p: 'molho', fator: 0.1 },
+      { nome: 'Complementos', tipo: 'itens', itens: [{ i: 'tomate', q: 20, u: 'g' }] }],
+      rendimentos: [{ emb: 'prato', unidades: 1 }] },
+    { id: 'quiche', nome: 'Quiche', componentes: [
+      { nome: 'Massa', tipo: 'itens', itens: [{ i: 'acucar', q: 10 }] },
+      { nome: 'Molho', cat: 'k_molho', tipo: 'preparo', p: 'molho', fator: 0.05 }], rendimentos: [{ emb: 'forma', unidades: 1 }] },
+    { id: 'latte', nome: 'Latte gelado', componentes: [
+      { nome: 'Base', tipo: 'itens', itens: [{ i: 'cafe', q: 18, u: 'g' }] }, { nome: 'Leite', tipo: 'itens', itens: [{ i: 'leite', q: 120, u: 'ml' }] },
+      { nome: 'Xarope', opcional: true, tipo: 'itens', itens: [{ i: 'acucar', q: 15 }] }, { nome: 'Finalização', tipo: 'itens', itens: [{ i: 'agua', q: 100, u: 'g' }] }],
+      rendimentos: [{ emb: 'copo', unidades: 1 }] });
+  const sand = db2.fichas.find(f => f.id === 'sand'), quiche = db2.fichas.find(f => f.id === 'quiche'), latte = db2.fichas.find(f => f.id === 'latte');
+
+  teste('9. Sanduíche com 5 componentes: 10 unidades multiplicam todos, inclusive o molho reaproveitado', () => {
+    const m = C.multPorUnidades(sand, 'prato', 10);
+    const g = C.expandirFicha(db2, sand, m.mult);
+    confere(g.map(x => x.nome).join(',') === 'Pão,Proteína,Queijo,Molho,Complementos', 'componentes fora de ordem ou faltando');
+    confere(g[0].linhas[0].q === 10 && g[1].linhas[0].q === 900 && g[2].linhas[0].q === 300 && g[4].linhas[0].q === 200, 'algum componente não multiplicou');
+    confere(perto(g[3].linhas[0].q, 200) && perto(g[3].linhas[1].q, 100), 'molho (preparo) não multiplicou: ' + g[3].linhas.map(l => l.q).join('/'));
+    return g.map(x => x.nome + ' ' + x.linhas.map(l => +l.q.toFixed(4)).join('+')).join(' · ');
+  });
+  teste('10. Peso de cada componente e da receita somam certo; custo entra no total', () => {
+    const r = C.resumoComponentes(C.expandirFicha(db2, latte, 2));
+    confere(r.comps.length === 4, 'deveria ter 4 componentes');
+    confere(perto(r.comps[1].g, 240 * 1.03), 'peso do leite (ml × densidade) errado');
+    confere(perto(r.g, r.comps.reduce((s, c) => s + c.g, 0)), 'peso total diferente da soma');
+    confere(perto(r.custo, C.custoFicha(db2, latte, 2).total), 'custo por componente não bate com o total da receita');
+    const semX = C.resumoComponentes(C.expandirFicha(db2, latte, 2, [2]));
+    confere(semX.comps.length === 3 && semX.custo < r.custo, 'desligar o xarope (opcional) deveria tirar peso e custo');
+    return 'total ' + r.g.toFixed(2) + ' g · R$ ' + r.custo.toFixed(4) + ' · componentes: ' + r.comps.map(c => c.nome + ' ' + c.g.toFixed(1) + ' g').join(', ');
+  });
+  teste('11. Preparo reaproveitado: uma mudança no molho vale para as duas receitas, sem duplicar', () => {
+    const antesS = C.expandirFicha(db2, sand, 1)[3].linhas[1].q, antesQ = C.expandirFicha(db2, quiche, 1)[1].linhas[1].q;
+    const db3 = copia(db2); db3.preparos.find(p => p.id === 'molho').itens[1].q = 200;
+    const s = db3.fichas.find(f => f.id === 'sand'), q = db3.fichas.find(f => f.id === 'quiche');
+    confere(perto(C.expandirFicha(db3, s, 1)[3].linhas[1].q, antesS * 2) && perto(C.expandirFicha(db3, q, 1)[1].linhas[1].q, antesQ * 2), 'mudança no preparo não chegou às receitas');
+    confere(db3.preparos.filter(p => p.id === 'molho').length === 1, 'preparo duplicado');
+    return 'tomate do molho no sanduíche: ' + antesS + ' g → ' + (antesS * 2) + ' g';
+  });
+  teste('12. Renomear um componente da lista atualiza as receitas ligadas a ele', () => {
+    const db3 = copia(db2);
+    confere(C.dependenciasComponente(db3, 'k_molho').length === 2, 'deveria achar 2 receitas usando Molho');
+    const n = C.renomearComponente(db3, 'k_molho', 'Molho especial');
+    confere(n === 2 && db3.fichas.find(f => f.id === 'sand').componentes[3].nome === 'Molho especial' && db3.fichas.find(f => f.id === 'quiche').componentes[1].nome === 'Molho especial', 'renomear não chegou nas receitas');
+    confere(db3.fichas.find(f => f.id === 'sand').componentes[1].nome === 'Proteína', 'renomear mexeu em outro componente');
+    return n + ' receitas atualizadas';
+  });
+  teste('13. Excluir um componente da lista não apaga dados de nenhuma receita', () => {
+    const db3 = copia(db2), antes = JSON.stringify(db3.fichas.map(f => f.componentes.map(c => ({ n: c.nome, i: c.itens, p: c.p, f: c.fator }))));
+    const n = C.excluirComponenteCat(db3, 'k_molho');
+    const depois = JSON.stringify(db3.fichas.map(f => f.componentes.map(c => ({ n: c.nome, i: c.itens, p: c.p, f: c.fator }))));
+    confere(n === 2 && antes === depois, 'excluir da lista alterou ingredientes, nomes ou preparos das receitas');
+    confere(!db3.componentesCat.some(x => x.id === 'k_molho') && db3.componentesCat.length === 1, 'não saiu da lista');
+    confere(perto(C.custoFicha(db3, db3.fichas.find(f => f.id === 'sand'), 1).total, C.custoFicha(db2, sand, 1).total), 'custo da receita mudou');
+    return 'removido só da lista; ' + n + ' receitas mantiveram o componente';
+  });
+  teste('14. Migração acrescenta a lista de componentes sem tocar nos existentes', () => {
+    const d = { insumos: [], componentesCat: [{ id: 'meu', nome: 'Meu componente', area: 'Outras' }] };
+    C.migrar(d, { componentesCat: [{ id: 'k1', nome: 'Massa', area: 'Confeitaria' }, { id: 'meu', nome: 'NÃO SOBRESCREVER', area: 'X' }] });
+    confere(d.componentesCat.length === 2 && d.componentesCat[0].nome === 'Meu componente', 'lista de componentes alterada');
+    C.migrar(d, { componentesCat: [{ id: 'k1', nome: 'Massa' }] });
+    confere(d.componentesCat.length === 2, 'duplicou');
+    return 'ok';
+  });
+
+  const falhas = resultados.filter(r => !r.ok).length;
+  document.getElementById('lista').innerHTML = resultados.map(r => '<li class="' + (r.ok ? 'ok' : 'fail') + '">' + (r.ok ? '✔ ' : '✘ ') + r.nome + '<br><small>' + r.msg + '</small></li>').join('');
+  document.getElementById('resumo').textContent = (resultados.length - falhas) + ' de ' + resultados.length + ' testes passaram.';
+  document.title = 'TESTES ' + (resultados.length - falhas) + '/' + resultados.length + (falhas ? ' FALHAS: ' + resultados.filter(r => !r.ok).map(r => r.nome + ' -> ' + r.msg).join(' | ') : '');
+})();
+</script>
+</body>
+</html>
