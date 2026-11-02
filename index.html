@@ -166,7 +166,13 @@ details.prep .ul{margin:0 0 10px 4px;padding-left:12px;border-left:3px solid var
 .balcao p,.balcao .li b,.balcao .ins-row span{font-size:19px}
 .balcao .li span{font-size:18px}
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(255,255,255,.97);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--linha);padding:8px 10px calc(8px + env(safe-area-inset-bottom))}
-.nav-in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.nav-in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.passos{list-style:none;margin:6px 0 0;padding:0}
+.passos li{display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--linha);font-size:16px;line-height:1.5}
+.passos li:last-child{border-bottom:0}
+.passos .pn{flex-shrink:0;width:30px;height:30px;border-radius:50%;background:var(--cafe);color:#fff;font-weight:800;font-size:14px;display:grid;place-items:center}
+.balcao .passos li{font-size:21px}
+.balcao .passos .pn{width:38px;height:38px;font-size:17px}
 .nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:60px;border-radius:18px;font-size:10.5px;letter-spacing:-.01em;font-weight:800;color:#9A836B;transition:background-color .15s,color .15s,transform .09s}
 .nav button:active{transform:scale(.94)}
 .nav button.on{background:var(--cafe);color:#fff}
@@ -237,7 +243,7 @@ details.prep .ul{margin:0 0 10px 4px;padding-left:12px;border-left:3px solid var
 <script>
 (function () {
 'use strict';
-const APP_VERSAO = '2.2.0';
+const APP_VERSAO = '2.3.0';
 // Se faltar um arquivo do app (publicação incompleta), mostra o aviso em vez de abrir em branco. Os dados do aparelho não são tocados.
 if (!window.BalayoCalc || !window.BalayoBackup) {
   const falta = [!window.BalayoCalc ? 'calculos.js' : '', !window.BalayoBackup ? 'backup.js' : ''].filter(Boolean).join(' e ');
@@ -331,7 +337,8 @@ const I = {
   undo: '<path d="M9 7L4 12l5 5"/><path d="M4 12h10a6 6 0 0 1 0 12h-2" transform="translate(0 -6)"/>',
   del: '<path d="M21 6H8l-5 6 5 6h13z"/><path d="M12 9l6 6M18 9l-6 6"/>',
   bar: '<path d="M5 4h14l-1.6 6.2A5.4 5.4 0 0 1 12 14.5a5.4 5.4 0 0 1-5.4-4.3z"/><path d="M12 14.5V20M8 20h8"/>',
-  chk: '<rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 9.5l2 2 3.5-3.5M9 15.5h6"/>'
+  chk: '<rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 9.5l2 2 3.5-3.5M9 15.5h6"/>',
+  rec: '<path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 7.5h6M9 11h6"/>'
 };
 const ic = (n, s, w) => '<svg class="ic" width="' + (s || 22) + '" height="' + (s || 22) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (w || 2) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + I[n] + '</svg>';
 
@@ -731,6 +738,7 @@ let PROD = loadProd();
 const UI = {
   tab: 'dia',
   rec: { ref: 'f:f_pudim', emb: '', modo: 'mult', mult: 1, qtd: '', excl: [] },
+  receitas: { grupo: 'todas', busca: '' },
   prop: { total: 2000, pcts: clone(DB.config.props) },
   cru: { prep: 'brigadeiro', alvo: 800, livre: { cru: '', pronto: '', perda: '40', alvo: '' } },
   dia: { cat: 'Todos', somar: false, modo: 'rec' },
@@ -1004,14 +1012,14 @@ function bannerSenha() {
 }
 
 /* ================= NAVEGAÇÃO ================= */
-const TITULOS = { prop: 'Proporções', cru: 'Cru × Cozido', dia: 'Produção diária', preco: 'Precificação', bar: 'Receitas do bar', chk: 'Checklist', admin: 'Administração' };
+const TITULOS = { prop: 'Proporções', cru: 'Cru × Cozido', dia: 'Produção diária', rec: 'Receitas', preco: 'Precificação', bar: 'Receitas do bar', chk: 'Checklist', admin: 'Administração' };
 function montarCasca() {
   $('#hdr').innerHTML = '<span class="hdr-logo">' + logoSVG(38) + '</span>' +
     '<div class="flex-1 min-w-0 leading-tight"><div class="font-marca text-[23px]" style="letter-spacing:.04em">Balayó</div>' +
     '<div id="hdrTitle" class="lbl" style="font-size:11px;letter-spacing:.16em"></div></div>' +
     '<button id="btnAdmin" class="iconbtn" data-act="admin"></button>';
   $('#nav').innerHTML = '<div class="side-brand">' + logoSVG(64) + wordmark(24) + '</div><div class="nav-in">' +
-    [['dia', 'Diário'], ['bar', 'Bar'], ['chk', 'Checklist'], ['preco', 'Preços']].map(([t, n]) =>
+    [['dia', 'Diário'], ['rec', 'Receitas'], ['bar', 'Bar'], ['chk', 'Checklist'], ['preco', 'Preços']].map(([t, n]) =>
       '<button data-tab="' + t + '"><span class="navico">' + ic(t, 24, 2) + (t === 'preco' ? '<span id="navLock" class="navlock">' + ic('lock', 10, 3) + '</span>' : '') + '</span><span>' + n + '</span></button>').join('') + '</div>';
 }
 function go(tab) {
@@ -1220,7 +1228,39 @@ function updRec() {
       (g.avisos.length ? '<p class="note mt-2">' + esc(g.avisos.join('; ')) + '</p>' : '') +
       '<ul class="ul mt-1">' + g.linhas.map(l => '<li class="li"><span>' + esc(l.nome) + (avisoCozinha(l) ? ' <span class="est">*</span>' : '') + '</span><b style="font-size:18px">' + qtdCozinha(l) + '</b></li>').join('') + '</ul></section>').join('') +
     (temAviso ? '<p class="note mt-3"><span class="est">*</span> confirmar com o gerente (peso médio, densidade ou medida caseira ainda não conferidos).</p>' : '') +
+    modoSecoesHtml(r.t, r.o) +
     '<div class="grid grid-cols-2 gap-2 mt-4"><button class="btn btn-pri" data-act="recCopy">' + ic('copy') + ' Copiar</button><button class="btn btn-wa" data-act="recWa">' + ic('wa') + ' WhatsApp</button></div>';
+}
+
+/* ---- Modo de preparo: um passo por linha ---- */
+function passos(txt) {
+  return String(txt || '').split(/\r?\n/).map(s => s.replace(/^\s*(\d+\s*[.)\-–:]|[-•*·])\s*/, '').trim()).filter(Boolean);
+}
+// Seções de modo de preparo de uma receita: a própria e a dos preparos que ela usa
+function modoSecoes(t, o) {
+  const s = [], vistos = {};
+  const addPrep = id => { const p = prepById(id); if (p && !vistos[p.id] && passos(p.modo).length) { vistos[p.id] = 1; s.push({ titulo: 'Como fazer: ' + p.nome, passos: passos(p.modo), sub: true }); } };
+  if (t === 'f') {
+    s.push({ titulo: 'Modo de preparo', passos: passos(o.modo), vazio: 'Modo de preparo ainda não cadastrado. O gerente cadastra em Administração → Fichas técnicas.' });
+    (o.componentes || []).forEach(c => { if (c.tipo === 'preparo') addPrep(c.p); });
+  } else if (t === 'p') {
+    s.push({ titulo: 'Modo de preparo', passos: passos(o.modo), vazio: 'Modo de preparo ainda não cadastrado. O gerente cadastra em Administração → Preparos e bases.' });
+  } else {
+    s.push({ titulo: 'Modo de montagem', passos: passos(o.modo), vazio: 'Modo de montagem ainda não cadastrado. O gerente cadastra em Administração → Produtos do cardápio.' });
+    (o.itens || []).forEach(l => {
+      if (l.r[0] === 'p') addPrep(l.r.slice(2));
+      if (l.r[0] === 'f') { const f = fichaById(l.r.slice(2)); if (f && !vistos[f.id] && passos(f.modo).length) { vistos[f.id] = 1; s.push({ titulo: 'Como fazer: ' + f.nome, passos: passos(f.modo), sub: true }); } }
+    });
+  }
+  return s;
+}
+function modoSecoesHtml(t, o) {
+  return modoSecoes(t, o).map(sec => '<section class="card mt-3"><div class="lbl">' + esc(sec.titulo) + '</div>' +
+    (sec.passos.length ? '<ol class="passos">' + sec.passos.map((p, i) => '<li><span class="pn">' + (i + 1) + '</span><span>' + esc(p) + '</span></li>').join('') + '</ol>'
+      : '<p class="note mt-2">' + esc(sec.vazio) + '</p>') + '</section>').join('');
+}
+function modoSecoesTxt(t, o) {
+  return modoSecoes(t, o).filter(sec => sec.passos.length).map(sec => '\n*' + sec.titulo + '*\n' + sec.passos.map((p, i) => (i + 1) + '. ' + p).join('\n')).join('\n');
 }
 // Total de cada componente no Diário (só aparece se todos os itens têm peso em g) e rendimento medido, se houver
 function totalGrupo(r, g) {
@@ -1240,7 +1280,8 @@ function totalGrupoTxt(r, g) {
 function textoRec() {
   const r = recResultado(); if (!r || r.erro) return '';
   return ('*Balayó — ' + r.o.nome + '*\n' + r.sub + (r.e ? ' · ' + r.e.nome : '') + '\n' +
-    r.grupos.map(g => '\n*' + g.nome + '*' + totalGrupoTxt(r, g) + '\n' + g.linhas.map(l => '• ' + l.nome + ': ' + qtdCozinha(l) + (avisoCozinha(l) ? ' *' : '')).join('\n')).join('\n')).trim();
+    r.grupos.map(g => '\n*' + g.nome + '*' + totalGrupoTxt(r, g) + '\n' + g.linhas.map(l => '• ' + l.nome + ': ' + qtdCozinha(l) + (avisoCozinha(l) ? ' *' : '')).join('\n')).join('\n') +
+    modoSecoesTxt(r.t, r.o)).trim();
 }
 
 /* ---- Lista do cardápio (produção por produto do cardápio) ---- */
@@ -1652,6 +1693,7 @@ function sheetProduto(id, onSaved) {
       '<label class="fl mt-3">Categoria' + selectCat(catsProdutos().concat(catsProdutos().includes(d.cat) ? [] : [d.cat]), d.cat) + '</label>' +
       '<input class="inp mt-2 hidden" id="catNova" data-in="catNova" placeholder="Nome da nova categoria">' +
       '<label class="fl mt-3">Descrição<textarea class="inp" data-in="t" data-k="desc" rows="2">' + esc(d.desc) + '</textarea></label>' +
+      '<label class="fl mt-3">Modo de montagem — um passo por linha (a equipe vê na aba Receitas)<textarea class="inp" data-in="t" data-k="modo" rows="5" placeholder="Ex.:&#10;Abrir o croissant ao meio.&#10;Rechear com presunto e queijo.&#10;Gratinar por 4 min.">' + esc(d.modo || '') + '</textarea></label>' +
       '<div class="lbl mt-5">Composição de 1 unidade</div><p class="text-[13px] mt-1" style="color:var(--txt-2)">Para preparos, escolha se a quantidade é do preparo <b>cru</b> (ex.: massa antes de assar) ou <b>pronto</b> (ex.: recheio já cozido).</p>' +
       '<div id="peLines" class="mt-2"></div><button class="btn btn-sec w-full mt-1" data-act="add">' + ic('plus') + ' Adicionar ingrediente ou preparo</button>' +
       '<div class="grid grid-cols-3 gap-2 mt-5"><label class="fl">Preço (R$)<input class="inp inp-sm" data-in="n" data-k="preco" inputmode="decimal" value="' + nfIn0(d.preco) + '" placeholder="0,00"></label>' +
@@ -1682,6 +1724,7 @@ function sheetProduto(id, onSaved) {
         save: () => {
           if (!d.nome.trim()) { $('#peErr', B).textContent = 'Dê um nome ao produto.'; return; }
           d.nome = d.nome.trim(); d.itens = d.itens.filter(l => l.q > 0); d.itens.forEach(l => { delete l.est; if (!l.obs) delete l.obs; });
+          if (d.modo !== undefined || (orig && orig.modo !== undefined)) d.modo = String(d.modo || '').trim();
           if (orig) Object.assign(orig, d); else DB.produtos.push(d);
           save(); api.close(); toast('Produto salvo'); refreshMain(); if (onSaved) onSaved(d);
         },
@@ -1721,7 +1764,7 @@ function sheetPreparo(id) {
       '<label class="fl mt-3">Ou digite a perda conhecida (%)<input id="perdaIn" class="inp inp-sm" data-in="n" data-k="perda" inputmode="decimal" value="' + (d.perda == null ? '' : nfIn(d.perda)) + '" placeholder="vazio = não calibrado"></label></div>' +
       '<div class="lbl mt-5">Ingredientes da receita base (crus)</div><div id="prLines" class="mt-2"></div>' +
       '<button class="btn btn-sec w-full mt-1" data-act="add">' + ic('plus') + ' Adicionar ingrediente</button>' +
-      '<label class="fl mt-4">Modo de preparo / observações<textarea class="inp" data-in="t" data-k="modo" rows="3">' + esc(d.modo) + '</textarea></label>' +
+      '<label class="fl mt-4">Modo de preparo — um passo por linha (a equipe vê na aba Receitas)<textarea class="inp" data-in="t" data-k="modo" rows="6" placeholder="Um passo em cada linha">' + esc(d.modo) + '</textarea></label>' +
       '<div id="prCalc" class="calc mt-3"></div>' + (usos.length ? '<p class="note mt-3"><b>Usado em:</b> ' + usos.map(esc).join(', ') + '</p>' : '') +
       '<p id="prErr" class="err mt-2"></p><div class="flex gap-2 mt-1">' + (orig ? '<button class="btn btn-bad" data-act="del" aria-label="Excluir preparo">' + ic('trash') + '</button><button class="btn btn-out" data-act="dup">Duplicar</button>' : '') +
       '<button class="btn btn-pri flex-1" data-act="save">' + ic('check') + ' Salvar</button></div>',
@@ -2041,6 +2084,112 @@ function avisoOutraAba() {
     onClose() { avisoAbaAberto = false; }
   });
 }
+/* ================= ABA RECEITAS (para a equipe seguir; sem preços) ================= */
+function itensReceitas() {
+  const est = l => l.some(x => x.est);
+  return DB.fichas.map(f => ({ ref: 'f:' + f.id, nome: f.nome, tipo: 'Ficha técnica', grupo: 'fichas', cat: f.cat || '', o: f,
+      badge: f.status === 'aprovada' ? '<span class="badge ok">aprovada</span>' : '<span class="badge warn">em teste</span>', modo: passos(f.modo).length,
+      vazia: !(f.componentes || []).some(c => c.tipo === 'preparo' ? !!c.p : (c.itens || []).length) }))
+    .concat(DB.preparos.map(p => ({ ref: 'p:' + p.id, nome: p.nome, tipo: 'Preparo', grupo: 'preparos', cat: '', o: p,
+      badge: p.est ? '<span class="badge warn">estimada</span>' : '', modo: passos(p.modo).length, vazia: !(p.itens || []).length })))
+    .concat(DB.produtos.map(p => ({ ref: 'x:' + p.id, nome: p.nome, tipo: 'Montagem', grupo: 'montagem', cat: p.cat || '', o: p,
+      badge: est(p.itens || []) ? '<span class="badge warn">quantidades estimadas</span>' : '', modo: passos(p.modo).length, vazia: !(p.itens || []).length })))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+function vReceitas(m) {
+  const R = UI.receitas;
+  m.innerHTML = '<div class="seg">' + [['todas', 'Todas'], ['fichas', 'Fichas'], ['preparos', 'Preparos'], ['montagem', 'Montagem']].map(([k, t]) =>
+      '<button class="' + (R.grupo === k ? 'on' : '') + '" data-act="rcGrupo" data-v="' + k + '">' + t + '</button>').join('') + '</div>' +
+    '<div class="relative mt-3"><input class="inp inp-sm" style="padding-left:44px" data-in="rcBusca" value="' + esc(R.busca) + '" placeholder="Buscar receita" aria-label="Buscar receita">' +
+    '<span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--txt-2)">' + ic('search', 20) + '</span></div>' +
+    '<div id="rcList" class="grid gap-3 mt-3 md:grid-cols-2"></div>';
+  updReceitas();
+}
+function updReceitas() {
+  const R = UI.receitas, q = norm(R.busca);
+  const lista = itensReceitas().filter(x => (R.grupo === 'todas' || x.grupo === R.grupo) && (!q || norm(x.nome).includes(q)));
+  $('#rcList').innerHTML = lista.map(x => '<button class="pr-row" data-act="rcOpen" data-ref="' + x.ref + '"><div class="flex-1 min-w-0"><span class="lbl" style="font-size:10.5px">' + esc(x.tipo) + (x.cat ? ' · ' + esc(x.cat) : '') + '</span>' +
+      '<div class="font-extrabold text-[16px] leading-snug mt-1">' + esc(x.nome) + '</div>' +
+      '<div class="text-[13px] mt-1" style="color:' + (x.vazia || !x.modo ? 'var(--warn)' : 'var(--txt-2)') + '">' + (x.vazia ? 'receita ainda não cadastrada' : x.modo ? x.modo + ' passo' + (x.modo > 1 ? 's' : '') : 'sem modo de preparo') + '</div></div>' + x.badge + '</button>').join('') ||
+    '<div class="empty">Nenhuma receita encontrada.</div>';
+}
+// Linhas de um produto do cardápio (montagem) para N unidades, sem preços
+function linhasMontagem(p, un) {
+  return (p.itens || []).map(l => {
+    const t = l.r[0], id = l.r.slice(2);
+    if (t === 'i') { const ins = insById(id); return ins ? Calc.linhaInsumo(DB, { i: id, q: l.q, u: ins.un }, un) : { nome: '(item removido)', q: 0, u: 'g', g: null, avisos: [] }; }
+    if (t === 'p') { const pr = prepById(id), q = l.q * un; return { nome: (pr ? pr.nome : '(preparo removido)') + (l.cru ? ' (cru)' : ' (pronto)'), q, u: pr ? pr.un : 'g', g: pr && pr.un === 'g' ? q : null, avisos: [] }; }
+    const f = fichaById(id), e = embById(l.emb);
+    return { nome: (f ? f.nome : '(ficha removida)') + (e ? ' — ' + e.nome : ''), q: l.q * un, u: 'un', g: null, avisos: [] };
+  });
+}
+function sheetReceita(ref) {
+  const t = ref[0], id = ref.slice(2), o = t === 'f' ? fichaById(id) : t === 'p' ? prepById(id) : prodById(id);
+  if (!o) return;
+  const cal = t === 'f' ? (o.rendimentos || []).filter(r => r.unidades > 0 && embById(r.emb)) : [];
+  const S = { modo: 'mult', mult: 1, emb: cal[0] ? cal[0].emb : '', qtd: '', un: 1, excl: [] };
+  openSheet({
+    title: o.nome, html: '',
+    onMount(api) {
+      const B = api.body;
+      const calcular = () => {
+        if (t === 'x') return { grupos: [{ nome: 'Montagem', linhas: linhasMontagem(o, S.un > 0 ? S.un : 1) }], sub: nf(S.un > 0 ? S.un : 1, 1) + ' unidade(s)' };
+        let mult = S.mult, sub = nf(S.mult, 2) + '× a receita';
+        if (t === 'f' && S.modo === 'un') {
+          const m = Calc.multPorUnidades(o, S.emb, num(S.qtd));
+          if (!m.ok) return { erro: m.motivo === 'Informe a quantidade' ? 'Digite quantas unidades.' : 'Rendimento não calibrado para esta embalagem.' };
+          mult = m.mult; sub = nf(num(S.qtd), 1) + ' unidades · ' + embById(S.emb).nome;
+        }
+        const grupos = t === 'f' ? Calc.expandirFicha(DB, o, mult, S.excl).filter(g => g.incluido) : [{ nome: 'Ingredientes', linhas: Calc.linhasPreparo(DB, o, mult), avisos: [] }];
+        return { grupos, sub };
+      };
+      const drawIng = () => {
+        const r = calcular(), el = $('#rcIng', B); if (!el) return;
+        if (r.erro) { el.innerHTML = '<div class="empty">' + esc(r.erro) + '</div>'; return; }
+        el.innerHTML = '<div class="text-[14px] font-bold mb-1" style="color:var(--txt-2)">' + esc(r.sub) + '</div>' +
+          r.grupos.map(g => '<div class="card mt-2" style="padding:12px 14px"><div class="lbl">' + esc(g.nome) + '</div>' +
+            ((g.avisos || []).length ? '<p class="note mt-2">' + esc(g.avisos.join('; ')) + '</p>' : '') +
+            '<ul class="ul mt-1">' + g.linhas.map(l => '<li class="li"><span>' + esc(l.nome) + ((l.avisos || []).some(a => /densidade|peso unitário|peso médio|medida caseira/.test(a)) ? ' <span class="est">*</span>' : '') + '</span><b style="font-size:17px">' + qtdCozinha(l) + '</b></li>').join('') + '</ul></div>').join('');
+      };
+      const draw = () => {
+        const opc = t === 'f' ? (o.componentes || []).map((c, k) => ({ c, k })).filter(x => x.c.opcional) : [];
+        B.innerHTML = '<div class="flex flex-wrap gap-2 mb-3">' + '<span class="badge mute">' + (t === 'f' ? 'Ficha técnica' : t === 'p' ? 'Preparo' : 'Montagem do cardápio') + '</span>' +
+            (t === 'f' ? (o.status === 'aprovada' ? '<span class="badge ok">aprovada</span>' : '<span class="badge warn">EM TESTE</span>') : '') + '</div>' +
+          (t === 'x' && o.desc ? '<p class="text-[15px] mb-3" style="color:var(--txt-2)">' + esc(o.desc) + '</p>' : '') +
+          '<div class="lbl">Quanto vai fazer</div>' +
+          (t === 'f' && cal.length ? '<div class="seg mt-2">' + [['mult', 'Receita'], ['un', 'Unidades']].map(([k, tx]) => '<button class="' + (S.modo === k ? 'on' : '') + '" data-act="modo" data-v="' + k + '">' + tx + '</button>').join('') + '</div>' : '') +
+          (t === 'x' ? '<div class="flex flex-wrap gap-2 mt-2">' + [1, 5, 10, 20].map(v => '<button class="chip' + (S.un === v ? ' on' : '') + '" data-act="un" data-v="' + v + '">' + v + ' un</button>').join('') + '</div>'
+            : S.modo === 'mult' ? '<div class="flex flex-wrap gap-2 mt-2">' + [0.5, 1, 2, 3, 4].map(v => '<button class="chip' + (S.mult === v ? ' on' : '') + '" data-act="mult" data-v="' + v + '">' + nf(v, 1) + '×</button>').join('') + '</div>'
+            : '<div class="grid gap-2 mt-2" style="grid-template-columns:1fr 120px"><select class="inp inp-sm" data-ch="emb">' + cal.map(r => '<option value="' + r.emb + '"' + (S.emb === r.emb ? ' selected' : '') + '>' + esc(embById(r.emb).nome) + '</option>').join('') + '</select>' +
+              '<input class="inp inp-sm" data-in="qtd" inputmode="decimal" value="' + esc(S.qtd) + '" placeholder="unidades" aria-label="Unidades"></div>') +
+          (opc.length ? '<div class="mt-2">' + opc.map(x => '<label class="check mt-2" style="font-size:15px"><input type="checkbox" data-ch="opc" data-k="' + x.k + '"' + (S.excl.includes(x.k) ? '' : ' checked') + '> Incluir ' + esc(x.c.nome.toLowerCase()) + '</label>').join('') + '</div>' : '') +
+          (cal.length ? '<p class="text-[13px] mt-2" style="color:var(--txt-2)">' + cal.map(r => 'Rende ' + nf(r.unidades, 1) + ' un — ' + esc(embById(r.emb).nome)).join(' · ') + ' (por receita)</p>' : '') +
+          '<div class="lbl mt-5">Ingredientes</div><div id="rcIng" class="mt-1"></div>' +
+          modoSecoesHtml(t === 'x' ? 'x' : t, o) +
+          '<button class="btn btn-sec w-full mt-4" data-act="bancada">Modo bancada (letra grande)</button>' +
+          '<div class="grid grid-cols-2 gap-2 mt-2"><button class="btn btn-pri" data-act="copiar">' + ic('copy') + ' Copiar</button><button class="btn btn-wa" data-act="wa">' + ic('wa') + ' WhatsApp</button></div>';
+        drawIng();
+      };
+      const texto = () => {
+        const r = calcular(); if (r.erro) return '';
+        return ('*Receita: ' + o.nome + '*\n' + r.sub + '\n' + r.grupos.map(g => '\n*' + g.nome + '*\n' + g.linhas.map(l => '• ' + l.nome + ': ' + qtdCozinha(l)).join('\n')).join('\n') + modoSecoesTxt(t === 'x' ? 'x' : t, o)).trim();
+      };
+      delegate(B, {
+        modo: el => { S.modo = el.dataset.v; draw(); },
+        mult: el => { S.mult = +el.dataset.v; draw(); },
+        un: el => { S.un = +el.dataset.v; draw(); },
+        bancada: () => B.classList.toggle('balcao'),
+        copiar: () => { const x = texto(); if (x) copiar(x); },
+        wa: () => { const x = texto(); if (x) abrirWhats(x); }
+      }, { qtd: el => { S.qtd = el.value; drawIng(); } }, {
+        emb: el => { S.emb = el.value; drawIng(); },
+        opc: el => { const k = +el.dataset.k; S.excl = el.checked ? S.excl.filter(x => x !== k) : S.excl.concat(k); drawIng(); }
+      });
+      draw();
+    }
+  });
+}
+
 /* ================= ABA BAR: RECEITAS ================= */
 function compQtd(c) { return c[1] ? c[1] + (c[2] ? ' ' + c[2] : '') : 'a definir'; }
 function bebResumo(b) { return b.comp.map(c => compQtd(c) + ' ' + c[0]).join(' + '); }
@@ -2404,7 +2553,8 @@ function admFichas(m) {
     '<div class="flex items-center justify-between mt-1"><h2 class="h2">Fichas técnicas</h2><button class="btn btn-pri" style="min-height:46px" data-act="fichaNova">' + ic('plus') + ' Nova</button></div>' +
     '<p class="note mt-3">Cadastre a receita original uma vez, com os componentes (massa, recheio, calda, cobertura). No Diário a equipe só escolhe a receita e quanto quer produzir.</p>' +
     '<div class="card mt-3" style="padding:4px 14px">' + DB.fichas.slice().sort(byNome).map(f => '<button class="ins-row" data-act="fichaEdit" data-id="' + f.id + '"><div class="flex-1 min-w-0"><div class="font-bold">' + esc(f.nome) + '</div>' +
-      '<div class="text-[13px]" style="color:var(--txt-2)">' + esc((f.componentes || []).map(c => c.nome).join(' · ') || 'sem componentes') + '</div></div>' + fichaStatus(f) + ic('chev', 18, 2.4) + '</button>').join('') + '</div>';
+      '<div class="text-[13px]" style="color:var(--txt-2)">' + esc((f.componentes || []).map(c => c.nome).join(' · ') || 'sem componentes') +
+      (passos(f.modo).length ? '' : ' · <span style="color:var(--warn)">sem modo de preparo</span>') + '</div></div>' + fichaStatus(f) + ic('chev', 18, 2.4) + '</button>').join('') + '</div>';
 }
 function sheetFicha(id) {
   const orig = id ? fichaById(id) : null;
@@ -2454,7 +2604,7 @@ function sheetFicha(id) {
               d.componentes.map((c, k) => '<label class="fl" style="font-size:12px">' + esc(c.nome) + '<input class="inp inp-sm" data-in="rpu" data-j="' + j + '" data-k="' + k + '" inputmode="decimal" value="' + nfIn0(r.porUnidade[k]) + '"></label>').join('') + '</div>' : '') +
             '<div id="frd' + j + '" class="calc mt-2"></div></div>').join('') +
           '<button class="btn btn-sec w-full mt-2" data-act="radd">' + ic('plus') + ' Adicionar forma ou embalagem</button>' +
-          '<label class="fl mt-5">Modo de preparo<textarea class="inp" data-in="ft" data-k="modo" rows="4">' + esc(d.modo) + '</textarea></label>' +
+          '<label class="fl mt-5">Modo de preparo — um passo por linha (a equipe vê na aba Receitas)<textarea class="inp" data-in="ft" data-k="modo" rows="7" placeholder="Ex.:&#10;Aquecer o leite até 60 °C.&#10;Misturar os ovos e as gemas sem bater.&#10;Assar em banho-maria a 160 °C por 40 min.">' + esc(d.modo) + '</textarea></label>' +
           '<label class="fl mt-3">Observações e pendências<textarea class="inp" data-in="ft" data-k="obs" rows="2">' + esc(d.obs) + '</textarea></label>' +
           '<p id="fErr" class="err mt-2"></p><div class="flex gap-2 mt-2">' + (orig ? '<button class="btn btn-bad" data-act="fdel" aria-label="Excluir ficha">' + ic('trash') + '</button><button class="btn btn-out" data-act="fdup">Duplicar</button>' : '') +
           '<button class="btn btn-pri flex-1" data-act="fsave">' + ic('check') + ' Salvar</button></div>';
@@ -2751,7 +2901,7 @@ function baixarImgChk(c) {
 }
 
 /* ================= AÇÕES DA TELA PRINCIPAL ================= */
-const VIEWS = { prop: vProp, cru: vCru, dia: vDia, bar: vBar, chk: vChk, preco: vPreco, admin: vAdmin };
+const VIEWS = { prop: vProp, cru: vCru, dia: vDia, rec: vReceitas, bar: vBar, chk: vChk, preco: vPreco, admin: vAdmin };
 const abrirAdmin = then => {
   if (UI.tab !== 'admin') UI.voltar = UI.tab;
   const fn = () => { UI.admin.sub = 'menu'; go('admin'); if (then) then(); };
@@ -2870,6 +3020,12 @@ Object.assign(ACT, {
   }
 });
 Object.assign(IN, { chkResp: el => store.set('balayo_chk_resp', el.value) });
+// Aba Receitas
+Object.assign(ACT, {
+  rcGrupo: el => { UI.receitas.grupo = el.dataset.v; render(); },
+  rcOpen: el => sheetReceita(el.dataset.ref)
+});
+Object.assign(IN, { rcBusca: el => { UI.receitas.busca = el.value; updReceitas(); } });
 // Fichas técnicas, embalagens e a tela "Calcular receita"
 Object.assign(ACT, {
   admFichas: () => { UI.admin.sub = 'fichas'; render(); window.scrollTo(0, 0); },
@@ -2904,7 +3060,7 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && needsUnlock() && $('#lock').classList.contains('hidden')) showLock(); });
 
-const tabSalva = store.get(SS_TAB, true), tabHash = (location.hash.match(/^#(prop|cru|dia|bar|chk|preco)$/) || [])[1];
+const tabSalva = store.get(SS_TAB, true), tabHash = (location.hash.match(/^#(prop|cru|dia|rec|bar|chk|preco)$/) || [])[1];
 UI.tab = tabHash || (VIEWS[tabSalva] && tabSalva !== 'admin' ? tabSalva : 'dia');
 render();
 if (needsUnlock()) showLock();
