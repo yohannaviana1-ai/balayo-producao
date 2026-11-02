@@ -10,9 +10,10 @@ h1{font-size:20px}.ok{color:#2F7A4A}.fail{color:#B23A2B;font-weight:700}
 li{margin:6px 0;line-height:1.4}small{color:#7A6450}
 </style>
 <script src="calculos.js?v=4"></script>
+<script src="backup.js?v=1"></script>
 </head>
 <body>
-<h1>Testes dos cálculos das fichas técnicas</h1>
+<h1>Testes dos cálculos e do backup</h1>
 <p id="resumo">Rodando…</p>
 <ol id="lista"></ol>
 <script>
@@ -227,10 +228,183 @@ li{margin:6px 0;line-height:1.4}small{color:#7A6450}
     return 'ok';
   });
 
-  const falhas = resultados.filter(r => !r.ok).length;
-  document.getElementById('lista').innerHTML = resultados.map(r => '<li class="' + (r.ok ? 'ok' : 'fail') + '">' + (r.ok ? '✔ ' : '✘ ') + r.nome + '<br><small>' + r.msg + '</small></li>').join('');
-  document.getElementById('resumo').textContent = (resultados.length - falhas) + ' de ' + resultados.length + ' testes passaram.';
-  document.title = 'TESTES ' + (resultados.length - falhas) + '/' + resultados.length + (falhas ? ' FALHAS: ' + resultados.filter(r => !r.ok).map(r => r.nome + ' -> ' + r.msg).join(' | ') : '');
+  /* ================= BACKUP E RECUPERAÇÃO (dados fictícios isolados) ================= */
+  const BK = window.BalayoBackup;
+  const baseBk = () => ({
+    version: 1,
+    config: { pinHash: 'VERIF-PIN-TESTE', pinLen: 4, adminHash: 'VERIF-ADM-TESTE', pinPadrao: false, adminPadrao: false, pesos: [500, 1000], custos: { salario: 3000, lucro: 25 } },
+    insumos: [{ id: 'leite', nome: 'Leite', un: 'ml', qtd: 1000, preco: 6.5, dens: 1.03 }, { id: 'acucar', nome: 'Açúcar', un: 'g', qtd: 1000, preco: 5 }],
+    preparos: [{ id: 'calda', nome: 'Calda', un: 'g', perda: null, itens: [{ i: 'acucar', q: 200 }], calib: { antes: 200, depois: 170 } }],
+    produtos: [{ id: 'p1', nome: 'Pudim individual', cat: 'Doces', itens: [{ r: 'f:pudim', q: 1, emb: 'e1' }], preco: 15, emb: 0.8, min: 3 }],
+    bebidas: [{ id: 'b1', nome: 'Latte', cat: 'Com leite', comp: [['Leite', '160', 'g']], status: 'teste' }],
+    checklists: [{ id: 'c1', setor: 'Bar', codigo: 'BAR-01', titulo: 'Abertura', items: [{ t: 'Pia limpa', tipo: 'ok' }, { t: 'Geladeira', tipo: 'num', un: '°C' }] }],
+    fichas: [{ id: 'pudim', nome: 'Pudim', componentes: [{ nome: 'Creme', cat: 'k1', tipo: 'itens', itens: [{ i: 'leite', q: 620, u: 'g' }] }, { nome: 'Calda', tipo: 'preparo', p: 'calda', fator: 1 }],
+      rendimentos: [{ emb: 'e1', unidades: 13, teste: { receitas: 1, obtidas: 13 }, porUnidade: { 0: 100 } }] }],
+    embalagens: [{ id: 'e1', nome: 'Pote 120 ml', cap: 120 }],
+    componentesCat: [{ id: 'k1', nome: 'Creme', area: 'Confeitaria' }],
+    semIds: ['fichas:pudim']
+  });
+  const operacao = () => ({
+    producao: { itens: [{ id: 'p1', q: 10 }], dia: '2026-11-02' },
+    respostas: { '2026-11-01_c1': { feitos: { 0: true }, vals: { 1: '4' }, concl: { hora: '13:50', resp: 'Ana' } } },
+    registros: [{ id: 'r1', tipo: 'login', nome: 'Ana', quando: '2026-11-01T16:00:00.000Z', dia: '2026-11-01', aparelho: 'Android AB12', detalhe: 'Entrou no app', ref: '' }]
+  });
+  const meta = t => ({ tipo: t, appVersao: 'teste', origem: 'aparelho_teste', agora: new Date('2026-11-02T12:00:00Z') });
+  const semAcesso = txt => ['VERIF-PIN-TESTE', 'VERIF-ADM-TESTE', 'pinHash', 'adminHash', 'pinLen', 'pinPadrao', 'adminPadrao'].every(s => txt.indexOf(s) < 0);
+
+  teste('B1. Impressão digital SHA-256 confere com valores de referência', () => {
+    confere(BK.sha256('') === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'vazio errado');
+    confere(BK.sha256('abc') === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', 'abc errado');
+    confere(BK.sha256('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq') === '248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1', 'vetor de 448 bits errado');
+    return 'vetores oficiais conferem';
+  });
+  teste('B2. Serialização canônica não depende da ordem dos campos', () => {
+    confere(BK.canonico({ b: 1, a: [1, { d: 2, c: 3 }] }) === BK.canonico({ a: [1, { c: 3, d: 2 }], b: 1 }), 'ordem alterou o resultado');
+    return BK.canonico({ b: 1, a: { d: 2, c: 3 } });
+  });
+  teste('B3. Backup completo leva preços e operação, mas nenhum dado de acesso', () => {
+    const b = BK.montarBackup({ db: baseBk(), operacao: operacao() }, meta('completo')), txt = JSON.stringify(b);
+    confere(semAcesso(txt), 'o arquivo contém dado de acesso');
+    confere(b.dados.cadastros.insumos[0].preco === 6.5 && b.dados.cadastros.config.custos.salario === 3000, 'faltaram preços ou custos');
+    confere(b.dados.operacao.registros.length === 1 && Object.keys(b.dados.operacao.respostas).length === 1 && b.dados.operacao.producao.itens.length === 1, 'faltou operação');
+    confere(b.formato === 'balayo-backup' && b.tipo === 'completo' && b.versaoFormato === 1 && /^[0-9a-f]{64}$/.test(b.integridade.valor) && b.exportadoEm === '2026-11-02T12:00:00.000Z', 'cabeçalho incompleto');
+    return 'contagens: ' + JSON.stringify(b.contagens);
+  });
+  teste('B4. Backup para a equipe sai sem preços, custos, operação e acesso', () => {
+    const b = BK.montarBackup({ db: baseBk(), operacao: operacao() }, meta('equipe')), txt = JSON.stringify(b);
+    confere(semAcesso(txt), 'contém dado de acesso');
+    confere(!('preco' in b.dados.cadastros.insumos[0]) && !('preco' in b.dados.cadastros.produtos[0]) && !('emb' in b.dados.cadastros.produtos[0]) && !b.dados.cadastros.config.custos, 'vazou dado financeiro');
+    confere(!b.dados.operacao && txt.indexOf('Ana') < 0, 'vazou operação');
+    confere(b.dados.cadastros.fichas[0].componentes[0].itens[0].q === 620, 'receita incompleta');
+    return 'ok';
+  });
+  teste('B5. Arquivo íntegro é aceito', () => {
+    const v = BK.lerArquivo(JSON.stringify(BK.montarBackup({ db: baseBk(), operacao: operacao() }, meta('completo')), null, 1));
+    confere(v.ok && v.formato === 'atual' && !v.erros.length, 'rejeitou arquivo bom: ' + v.erros.join('; '));
+    return v.avisos.length ? 'avisos: ' + v.avisos.join('; ') : 'sem avisos';
+  });
+  teste('B6. Arquivo cortado é recusado', () => {
+    const t = JSON.stringify(BK.montarBackup({ db: baseBk(), operacao: operacao() }, meta('completo')));
+    const v = BK.lerArquivo(t.slice(0, t.length - 40));
+    confere(!v.ok && /incompleto/.test(v.erros[0]), 'aceitou arquivo cortado');
+    return v.erros[0];
+  });
+  teste('B7. Conteúdo alterado depois de exportado é detectado', () => {
+    const b = BK.montarBackup({ db: baseBk(), operacao: operacao() }, meta('completo'));
+    b.dados.cadastros.insumos[0].preco = 1;
+    const v = BK.validarObjeto(JSON.parse(JSON.stringify(b)));
+    confere(!v.ok && v.erros.some(e => /integridade/.test(e)), 'não detectou alteração');
+    return v.erros.join('; ');
+  });
+  teste('B8. Estrutura, tipos, campos obrigatórios e versão são verificados', () => {
+    const mk = f => { const b = BK.montarBackup({ db: f(baseBk()), operacao: operacao() }, meta('completo')); return b; };
+    const r1 = BK.validarObjeto(mk(d => { delete d.insumos[0].id; return d; }));
+    confere(!r1.ok && r1.erros.some(e => /identificador/.test(e)), 'faltou id não detectado');
+    const r2 = BK.validarObjeto(mk(d => { d.insumos[0].qtd = 'mil'; return d; }));
+    confere(!r2.ok && r2.erros.some(e => /qtd/.test(e)), 'tipo errado não detectado');
+    const r3 = BK.validarObjeto(mk(d => { d.fichas.push(Object.assign({}, d.fichas[0])); return d; }));
+    confere(!r3.ok && r3.erros.some(e => /repetido/.test(e)), 'id repetido não detectado');
+    const b4 = mk(d => d); b4.versaoFormato = 99;
+    confere(!BK.validarObjeto(b4).ok && /versão mais nova/.test(BK.validarObjeto(b4).erros.join(' ')), 'versão não suportada aceita');
+    const b5 = mk(d => d); delete b5.integridade;
+    confere(!BK.validarObjeto(b5).ok, 'sem integridade aceito');
+    confere(!BK.validarObjeto({ qualquer: 1 }).ok && !BK.lerArquivo('[]').ok, 'arquivo estranho aceito');
+    return 'ok';
+  });
+  teste('B9. Referências quebradas viram aviso (sem apagar nada)', () => {
+    const v = BK.validarObjeto(BK.montarBackup({ db: (d => { d.fichas[0].componentes[1].p = 'nao-existe'; d.produtos[0].itens[0].emb = 'sumiu'; return d; })(baseBk()), operacao: operacao() }, meta('completo')));
+    confere(v.ok && v.avisos.some(a => /preparo que não existe/.test(a)) && v.avisos.some(a => /embalagem que não existe/.test(a)), 'referência quebrada não apontada');
+    return v.avisos.join('; ');
+  });
+  teste('B10. Prévia: novos, idênticos, diferentes e só no aparelho', () => {
+    const arquivo = baseBk(); arquivo.insumos.push({ id: 'ovo', nome: 'Ovo', un: 'un', qtd: 30 }); arquivo.preparos[0].itens[0].q = 250;
+    const local = baseBk(); local.produtos.push({ id: 'p2', nome: 'Só aqui', itens: [] });
+    const b = BK.montarBackup({ db: arquivo, operacao: operacao() }, meta('completo'));
+    const c = BK.comparar({ db: local, operacao: {} }, b.dados, 'completo');
+    confere(c.insumos.novos.join() === 'Ovo' && c.insumos.identicos.length === 2, 'insumos');
+    confere(c.preparos.diferentes.join() === 'Calda', 'preparos');
+    confere(c.produtos.soNoAparelho.join() === 'Só aqui', 'produtos');
+    confere(c.registros.novos.length === 1 && c.respostas.novos.length === 1, 'operação');
+    return 'insumos +' + c.insumos.novos.length + ' · preparo diferente: ' + c.preparos.diferentes + ' · só no aparelho: ' + c.produtos.soNoAparelho;
+  });
+  teste('B11. Juntar mantém o aparelho nos conflitos; "usar arquivo" e "substituir" trocam; registros nunca somem', () => {
+    const arquivo = baseBk(); arquivo.preparos[0].itens[0].q = 250; arquivo.insumos.push({ id: 'ovo', nome: 'Ovo', un: 'un', qtd: 30 });
+    const opArq = operacao(); opArq.registros = [{ id: 'r2', tipo: 'checklist', nome: 'Bia', quando: '2026-11-02T10:00:00.000Z' }];
+    const dados = BK.montarBackup({ db: arquivo, operacao: opArq }, meta('completo')).dados;
+    const local = { db: baseBk(), operacao: operacao() };
+    const j = BK.aplicar(local, dados, 'completo', { modo: 'juntar', conflitos: 'manterAparelho' });
+    confere(j.db.preparos[0].itens[0].q === 200 && j.db.insumos.length === 3, 'juntar errado');
+    const u = BK.aplicar(local, dados, 'completo', { modo: 'juntar', conflitos: 'usarArquivo' });
+    confere(u.db.preparos[0].itens[0].q === 250, 'usar arquivo errado');
+    const s = BK.aplicar({ db: (d => { d.produtos.push({ id: 'p2', nome: 'Só aqui', itens: [] }); return d; })(baseBk()), operacao: operacao() }, dados, 'completo', { modo: 'substituir' });
+    confere(!s.db.produtos.some(p => p.id === 'p2') && s.db.preparos[0].itens[0].q === 250, 'substituir errado');
+    [j, u, s].forEach(r => confere(r.operacao.registros.length === 2, 'registro sumiu'));
+    return 'ok';
+  });
+  teste('B12. Importação nunca troca o PIN e a senha do aparelho', () => {
+    const v1 = baseBk(); v1.config.pinHash = 'OUTRO-PIN'; v1.config.adminHash = 'OUTRA-SENHA';
+    const lido = BK.lerArquivo(JSON.stringify(v1));
+    confere(lido.ok && lido.formato === 'antigo' && lido.avisos.some(a => /descartados/.test(a)), 'arquivo antigo não reconhecido');
+    confere(semAcesso(JSON.stringify(lido.dados)) && JSON.stringify(lido.dados).indexOf('OUTRO-PIN') < 0, 'dado de acesso do arquivo foi lido');
+    ['juntar', 'substituir'].forEach(modo => {
+      const r = BK.aplicar({ db: baseBk(), operacao: {} }, lido.dados, 'completo', { modo, conflitos: 'usarArquivo' });
+      confere(r.db.config.pinHash === 'VERIF-PIN-TESTE' && r.db.config.adminHash === 'VERIF-ADM-TESTE' && r.db.config.pinPadrao === false, 'acesso alterado no modo ' + modo);
+    });
+    return 'acesso do aparelho preservado em todos os modos';
+  });
+  teste('B13. Arquivo da equipe não apaga os preços do aparelho', () => {
+    const dados = BK.montarBackup({ db: (d => { d.preparos[0].itens[0].q = 300; return d; })(baseBk()), operacao: operacao() }, meta('equipe')).dados;
+    ['juntar', 'substituir'].forEach(modo => {
+      const r = BK.aplicar({ db: baseBk(), operacao: operacao() }, dados, 'equipe', { modo, conflitos: 'usarArquivo' });
+      confere(r.db.insumos[0].preco === 6.5 && r.db.produtos[0].preco === 15 && r.db.produtos[0].emb === 0.8 && r.db.config.custos.salario === 3000, 'preço apagado no modo ' + modo);
+      confere(r.db.preparos[0].itens[0].q === 300, 'receita não atualizou no modo ' + modo);
+    });
+    return 'preços e custos mantidos; receitas atualizadas';
+  });
+  teste('B14. Ida e volta: exportar e restaurar num aparelho vazio reproduz tudo, com vínculos', () => {
+    const original = baseBk(), op = operacao();
+    const texto = JSON.stringify(BK.montarBackup({ db: original, operacao: op }, meta('completo')));
+    const lido = BK.lerArquivo(texto);
+    const vazio = { db: { config: { pinHash: 'NOVO-APARELHO', adminHash: 'NOVO-ADM' } }, operacao: {} };
+    const r = BK.aplicar(vazio, lido.dados, 'completo', { modo: 'substituir' });
+    const esperado = BK.limparCadastros(original, 'completo');
+    BK.COLECOES.forEach(col => confere(BK.iguais(r.db[col], esperado[col]), col + ' diferente após restaurar'));
+    confere(BK.iguais(r.operacao.respostas, op.respostas) && BK.iguais(r.operacao.registros, op.registros) && BK.iguais(r.operacao.producao, op.producao), 'operação diferente');
+    confere(r.db.fichas[0].componentes[1].p === 'calda' && r.db.fichas[0].componentes[0].cat === 'k1' && r.db.fichas[0].rendimentos[0].emb === 'e1' && r.db.produtos[0].itens[0].r === 'f:pudim', 'vínculos perdidos');
+    confere(r.db.config.pinHash === 'NOVO-APARELHO', 'acesso do aparelho novo foi trocado');
+    return 'cadastros, operação e vínculos idênticos';
+  });
+  teste('B15. Importar não altera os dados de origem na memória', () => {
+    const local = { db: baseBk(), operacao: operacao() }, antes = BK.canonico(local);
+    const dados = BK.montarBackup({ db: baseBk(), operacao: operacao() }, meta('completo')).dados, antesArq = BK.canonico(dados);
+    BK.aplicar(local, dados, 'completo', { modo: 'substituir' });
+    confere(BK.canonico(local) === antes && BK.canonico(dados) === antesArq, 'objetos de entrada foram modificados');
+    return 'ok';
+  });
+  teste('B16. Diagnóstico separa padrão de fábrica, alterados, criados e removidos', () => {
+    const semente = baseBk(), d = baseBk();
+    d.insumos[0].preco = 9; d.insumos.push({ id: 'novo', nome: 'Novo' }); d.bebidas = [];
+    const r = BK.diagnosticoSemente(d, semente);
+    confere(r.insumos.fabrica === 1 && r.insumos.alterados === 1 && r.insumos.criados === 1 && r.bebidas.removidos === 1, JSON.stringify(r.insumos));
+    return 'insumos: ' + JSON.stringify(r.insumos);
+  });
+
+  function concluir() {
+    const falhas = resultados.filter(r => !r.ok).length;
+    document.getElementById('lista').innerHTML = resultados.map(r => '<li class="' + (r.ok ? 'ok' : 'fail') + '">' + (r.ok ? '✔ ' : '✘ ') + r.nome + '<br><small>' + r.msg + '</small></li>').join('');
+    document.getElementById('resumo').textContent = (resultados.length - falhas) + ' de ' + resultados.length + ' testes passaram.';
+    document.title = 'TESTES ' + (resultados.length - falhas) + '/' + resultados.length + (falhas ? ' FALHAS: ' + resultados.filter(r => !r.ok).map(r => r.nome + ' -> ' + r.msg).join(' | ') : '');
+  }
+  // Conferência cruzada com o SHA-256 do próprio navegador (quando disponível)
+  if (window.crypto && crypto.subtle && window.TextEncoder) {
+    const amostra = 'Pudim tradicional — ç ã é 🍮 ' + 'x'.repeat(5000);
+    crypto.subtle.digest('SHA-256', new TextEncoder().encode(amostra)).then(buf => {
+      const hex = Array.from(new Uint8Array(buf)).map(b => ('0' + b.toString(16)).slice(-2)).join('');
+      resultados.push(hex === BK.sha256(amostra) ? { nome: 'B17. SHA-256 próprio = SHA-256 do navegador (texto longo com acentos e emoji)', ok: true, msg: hex.slice(0, 16) + '…' }
+        : { nome: 'B17. SHA-256 próprio = SHA-256 do navegador', ok: false, msg: 'diferente' });
+      concluir();
+    }).catch(() => concluir());
+  } else concluir();
 })();
 </script>
 </body>
