@@ -233,10 +233,20 @@ details.prep .ul{margin:0 0 10px 4px;padding-left:12px;border-left:3px solid var
 <div id="toast" role="status" aria-live="polite"></div>
 <noscript><p style="padding:24px">Ative o JavaScript para usar o app.</p></noscript>
 <script src="calculos.js?v=4"></script>
+<script src="backup.js?v=1"></script>
 <script>
 (function () {
 'use strict';
-const Calc = window.BalayoCalc;
+const APP_VERSAO = '2.2.0';
+// Se faltar um arquivo do app (publicação incompleta), mostra o aviso em vez de abrir em branco. Os dados do aparelho não são tocados.
+if (!window.BalayoCalc || !window.BalayoBackup) {
+  const falta = [!window.BalayoCalc ? 'calculos.js' : '', !window.BalayoBackup ? 'backup.js' : ''].filter(Boolean).join(' e ');
+  document.body.innerHTML = '<div style="max-width:520px;margin:40px auto;padding:24px;font-family:system-ui,sans-serif;color:#4A3319;line-height:1.5">' +
+    '<h1 style="font-size:22px">O app não abriu por completo</h1><p>Falta um arquivo do aplicativo: <b>' + falta + '</b>. Isso costuma acontecer quando a publicação foi feita sem todos os arquivos, ou sem internet logo depois de uma atualização.</p>' +
+    '<p><b>Seus dados continuam guardados neste aparelho.</b> Não limpe os dados do navegador. Tente abrir de novo com internet e, se continuar, avise o responsável.</p></div>';
+  return;
+}
+const Calc = window.BalayoCalc, Bk = window.BalayoBackup;
 /* ================= NUVEM (Firebase) =================
    Configuração do projeto Firebase (veja docs/NUVEM-PASSO-A-PASSO.md).
    Enquanto estiver vazia, o Painel da equipe mostra só os registros deste aparelho.
@@ -680,11 +690,36 @@ function normalize(db) {
   db.produtos = (db.produtos || []).map(p => Object.assign({ id: uid('x'), nome: '', cat: 'Outros', desc: '', itens: [], preco: 0, min: 0, emb: 0 }, p));
   return db;
 }
+/* ---- Proteção dos dados (v2.2) ---- */
+const LS_COPIA = 'balayo_copia_antes_v2_2', LS_PONTOS = 'balayo_pontos_restauracao', LS_ULT_BACKUP = 'balayo_ultimo_backup';
+let ultimoSalvo = null;        // o que este app gravou ou leu por último (para perceber outra aba)
+let AVISO_ARMAZ = '';          // problema de leitura ou de espaço, mostrado em destaque
 function loadDB() {
-  try { const raw = store.get(LS_KEY); if (raw) return normalize(JSON.parse(raw)); } catch (e) {}
-  return seedDB();
+  const raw = store.get(LS_KEY);
+  ultimoSalvo = raw;
+  // Cópia automática do estado de antes desta versão: feita uma única vez e nunca sobrescrita
+  if (raw && !store.get(LS_COPIA)) {
+    if (!store.set(LS_COPIA, JSON.stringify({ criadaEm: new Date().toISOString(), appVersao: APP_VERSAO, bruto: raw })))
+      AVISO_ARMAZ = 'Não houve espaço para guardar a cópia automática de antes da atualização. Exporte um backup completo agora (Administração → Backup).';
+  }
+  if (!raw) return seedDB();
+  try { return normalize(JSON.parse(raw)); }
+  catch (e) {
+    // Dados ilegíveis: guarda o conteúdo original à parte em vez de apagar
+    store.set('balayo_dados_ilegiveis_' + Date.now(), raw);
+    AVISO_ARMAZ = 'Os dados salvos neste aparelho não puderam ser lidos. Uma cópia do conteúdo original foi guardada à parte. Não limpe o navegador e avise o responsável.';
+    return seedDB();
+  }
 }
-function save() { if (!store.set(LS_KEY, JSON.stringify(DB))) toast('Não foi possível salvar neste aparelho'); }
+// Salva o banco. Se outra aba/janela gravou depois, não sobrescreve sem perguntar.
+function save() {
+  const noAparelho = store.get(LS_KEY);
+  if (noAparelho !== ultimoSalvo) { avisoOutraAba(); return false; }
+  const s = JSON.stringify(DB);
+  if (!store.set(LS_KEY, s)) { toast('Não foi possível salvar neste aparelho (sem espaço?)'); return false; }
+  ultimoSalvo = s;
+  return true;
+}
 function loadProd() {
   try { const p = JSON.parse(store.get(LS_PROD) || 'null'); if (p && Array.isArray(p.itens)) return p; } catch (e) {}
   return { itens: [], dia: hojeISO() };
@@ -957,10 +992,15 @@ function askAdmin(onOk, onCancel) {
     onClose() { if (!ok && onCancel) onCancel(); }
   });
 }
+const EH_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const EH_INSTALADO = window.navigator.standalone === true || !!(window.matchMedia && matchMedia('(display-mode: standalone)').matches);
 function bannerSenha() {
   const c = DB.config;
-  if (!c.pinPadrao && !c.adminPadrao) return '';
-  return '<button class="banner" data-act="goSeg">' + ic('lock', 20, 2.4) + '<span>Você ainda usa a senha padrão. <b>Toque aqui para trocar.</b></span></button>';
+  let h = '';
+  if (AVISO_ARMAZ) h += '<div class="banner" style="background:#FBE7E4;border-color:#F3CFC9;color:#8A2A1F">' + ic('warn', 20, 2.4) + '<span>' + esc(AVISO_ARMAZ) + '</span></div>';
+  if (EH_IOS && !EH_INSTALADO) h += '<div class="banner" style="background:#FBE7E4;border-color:#F3CFC9;color:#8A2A1F">' + ic('warn', 20, 2.4) + '<span><b>Você abriu pelo navegador.</b> No iPhone, o app instalado na tela inicial e o Safari guardam dados separados. Use sempre o ícone do Balayó.</span></div>';
+  if (c.pinPadrao || c.adminPadrao) h += '<button class="banner" data-act="goSeg">' + ic('lock', 20, 2.4) + '<span>Você ainda usa a senha padrão. <b>Toque aqui para trocar.</b></span></button>';
+  return h;
 }
 
 /* ================= NAVEGAÇÃO ================= */
@@ -1544,14 +1584,19 @@ function vAdmin(m) {
     '<section class="card mt-4" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Segurança</div>' +
     menuRow('segPin', 'lock', 'Trocar PIN do app', c.pinPadrao ? 'usando o PIN padrão' : c.pinLen + ' dígitos') +
     menuRow('segAdm', 'lock', 'Trocar senha do administrador', c.adminPadrao ? 'usando a senha padrão' : 'senha personalizada') + '</section>' +
-    '<section class="card mt-4" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Backup</div>' +
-    '<p class="note mt-2">Os dados ficam salvos só neste aparelho. Faça backup de vez em quando — e use o arquivo para passar receitas e preços para outro celular.</p>' +
-    menuRow('bkExp', 'download', 'Exportar backup', 'salvar ou enviar o arquivo (ex.: WhatsApp)') +
-    menuRow('bkImp', 'upload', 'Importar backup', 'substitui os dados deste aparelho') +
-    menuRow('bkReset', 'warn', 'Restaurar dados originais', 'apaga suas alterações e preços') +
-    '<input type="file" id="bkFile" data-ch="bkFile" accept=".json,application/json" class="hidden"></section>' +
+    '<section class="card mt-4" style="padding:8px 16px"><div class="lbl" style="padding-top:10px">Backup e recuperação</div>' + statusBackupHtml() +
+    menuRow('bkExp', 'download', 'Exportar backup', 'completo (com preços) ou para a equipe (sem preços)') +
+    menuRow('bkImp', 'upload', 'Importar ou verificar arquivo', 'mostra a prévia antes de mudar qualquer coisa') +
+    menuRow('bkPontos', 'undo', 'Pontos de restauração', pontosGet().length + ' neste aparelho' + (copiaAntes() ? ' · cópia de antes da atualização' : '')) +
+    menuRow('bkDiag', 'search', 'Diagnóstico dos dados deste aparelho', 'o que é padrão de fábrica e o que foi cadastrado') +
+    menuRow('bkReset', 'warn', 'Restaurar dados originais', 'cria um ponto de restauração antes') + '</section>' +
     '<div class="grid grid-cols-2 gap-2 mt-4"><button class="btn btn-out" data-act="admLock">Sair do admin</button><button class="btn btn-out" data-act="appLock">' + ic('lock') + ' Bloquear app</button></div>' +
-    '<p class="text-center text-[12px] mt-6" style="color:var(--txt-2)">Balayó · v2.0 (fichas técnicas) · São Miguel dos Milagres</p>';
+    '<p class="text-center text-[12px] mt-6" style="color:var(--txt-2)">Balayó · v' + APP_VERSAO + ' · São Miguel dos Milagres</p>';
+}
+function statusBackupHtml() {
+  const ult = store.get(LS_ULT_BACKUP), dias = ult ? Math.floor((Date.now() - Date.parse(ult)) / 864e5) : null;
+  const txt = dias === null ? 'Ainda não há backup completo exportado deste aparelho.' : 'Último backup completo: ' + dataHora(ult) + (dias >= 1 ? ' (há ' + dias + ' dia' + (dias > 1 ? 's' : '') + ')' : ' (hoje)') + '.';
+  return '<p class="' + (dias === null || dias > 7 ? 'warnline' : 'okline') + '" style="margin-top:8px">' + ic(dias === null || dias > 7 ? 'warn' : 'check', 18, 2.4) + ' ' + txt + (dias === null || dias > 7 ? ' Recomendado: 1 vez por semana.' : '') + '</p>';
 }
 function admProdutos(m) {
   m.innerHTML = '<button class="back" data-act="admMenu">' + ic('back', 20, 2.6) + ' Administração</button>' +
@@ -1762,29 +1807,239 @@ function sheetSenha(tipo) {
     }
   });
 }
-async function exportar() {
-  const json = JSON.stringify(DB, null, 1), nome = 'balayo-backup-' + hojeISO() + '.json';
+/* ================= BACKUP E RECUPERAÇÃO (v2.2) ================= */
+// Dados de operação guardados fora do banco principal (lista do dia, respostas de checklist, registros)
+function operacaoAtual() {
+  const respostas = {};
   try {
-    const file = new File([json], nome, { type: 'application/json' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Backup Balayó' }); return; }
-  } catch (e) { if (e && e.name === 'AbortError') return; }
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf('balayo_chk_') === 0 && k !== 'balayo_chk_resp') { try { respostas[k.slice(11)] = JSON.parse(localStorage.getItem(k)); } catch (e) {} }
+    }
+  } catch (e) {}
+  return { producao: clone(PROD), respostas, registros: logGet() };
+}
+function gravarOperacao(op) {
+  if (op.producao && Array.isArray(op.producao.itens)) { PROD = op.producao; saveProd(); }
+  Object.keys(op.respostas || {}).forEach(k => store.set('balayo_chk_' + k, JSON.stringify(op.respostas[k])));
+  if (Array.isArray(op.registros)) store.set(LS_LOG, JSON.stringify(op.registros));
+}
+const metaBackup = (tipo, obs) => ({ tipo, appVersao: APP_VERSAO, origem: 'aparelho_' + aparelhoId(), observacao: obs || '' });
+const montarBackupAtual = (tipo, obs) => Bk.montarBackup({ db: DB, operacao: operacaoAtual() }, metaBackup(tipo, obs));
+const dataHora = iso => { const d = new Date(iso); return isNaN(d) ? String(iso || '') : d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); };
+async function baixarArquivo(texto, nome) {
+  try {
+    const file = new File([texto], nome, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: nome }); return true; }
+  } catch (e) { if (e && e.name === 'AbortError') return false; }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); a.download = nome;
+  a.href = URL.createObjectURL(new Blob([texto], { type: 'application/json' })); a.download = nome;
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
-  toast('Backup salvo');
+  return true;
 }
-function importar(file) {
-  const fr = new FileReader();
-  fr.onload = () => {
-    try {
-      const d = JSON.parse(fr.result);
-      if (!d || !Array.isArray(d.insumos) || !Array.isArray(d.produtos) || !Array.isArray(d.preparos)) throw new Error('formato');
-      if (!confirm('Importar backup com ' + d.produtos.length + ' produtos, ' + d.preparos.length + ' preparos e ' + d.insumos.length + ' insumos?\n\nIsso substitui os dados deste aparelho, inclusive PIN e senha do backup.')) return;
-      DB = normalize(d); save(); UI.prop.pcts = clone(DB.config.props); toast('Backup importado'); render();
-    } catch (e) { alert('Arquivo inválido. Escolha um backup .json exportado por este app.'); }
-  };
-  fr.readAsText(file);
+const nomeArquivo = prefixo => 'balayo-' + prefixo + '-' + hojeISO() + '-' + new Date().toTimeString().slice(0, 5).replace(':', 'h') + '.json';
+async function exportarBackup(tipo) {
+  const b = montarBackupAtual(tipo);
+  const texto = JSON.stringify(b, null, 1);
+  const conf = Bk.lerArquivo(texto); // confere o próprio arquivo antes de entregar
+  if (!conf.ok) { alert('Não consegui gerar um backup válido:\n' + conf.erros.join('\n')); return; }
+  const ok = await baixarArquivo(texto, nomeArquivo(tipo === 'equipe' ? 'equipe' : 'backup-completo'));
+  if (ok && tipo === 'completo') store.set(LS_ULT_BACKUP, b.exportadoEm);
+  if (ok) toast('Backup ' + (tipo === 'equipe' ? 'para a equipe' : 'completo') + ' gerado e conferido');
+}
+function sheetExportar() {
+  openSheet({
+    title: 'Exportar backup',
+    html: '<div class="card" style="padding:14px"><div class="font-extrabold">Backup completo</div>' +
+      '<p class="text-[14px] mt-1 leading-relaxed">Todos os cadastros, preços, custos, rendimentos, respostas de checklist, registros e a lista de produção. <b>Não leva PIN nem senha.</b></p>' +
+      '<p class="note mt-2" style="color:#7A4E0E;background:#FFF7E8">Contém informações financeiras: guarde em local privado (seu e-mail, seu Drive, um pen drive). Não envie em grupos nem publique no GitHub.</p>' +
+      '<button class="btn btn-pri w-full mt-3" data-act="comp">' + ic('download') + ' Exportar completo</button></div>' +
+      '<div class="card mt-3" style="padding:14px"><div class="font-extrabold">Para a equipe</div>' +
+      '<p class="text-[14px] mt-1 leading-relaxed">Receitas, fichas, preparos, embalagens, bar e modelos de checklist. <b>Sem preços, custos, registros, PIN ou senha.</b> Use para atualizar o celular da equipe.</p>' +
+      '<button class="btn btn-sec w-full mt-3" data-act="eq">' + ic('download') + ' Exportar para a equipe</button></div>' +
+      '<p class="note mt-3">Cada arquivo leva uma verificação de integridade (SHA-256): ela mostra se o arquivo foi cortado ou alterado. Ela <b>não</b> criptografa o arquivo e não prova quem o fez.</p>',
+    onMount(api) { delegate(api.body, { comp: () => { api.close(); exportarBackup('completo'); }, eq: () => { api.close(); exportarBackup('equipe'); } }); }
+  });
+}
+
+/* ---- Pontos de restauração (neste aparelho) ---- */
+const pontosGet = () => { try { const l = JSON.parse(store.get(LS_PONTOS) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } };
+// Guarda o estado atual (sem dados de acesso). Mantém os 5 mais recentes. Devolve false se não houver espaço.
+function criarPonto(motivo, dbOrigem) {
+  const b = Bk.montarBackup({ db: dbOrigem || DB, operacao: operacaoAtual() }, metaBackup('completo', 'Ponto de restauração: ' + motivo));
+  let lista = [{ motivo, backup: b }].concat(pontosGet()).slice(0, 5);
+  while (lista.length) { if (store.set(LS_PONTOS, JSON.stringify(lista))) return true; lista.pop(); }
+  return false;
+}
+function copiaAntes() { try { return JSON.parse(store.get(LS_COPIA) || 'null'); } catch (e) { return null; } }
+function sheetPontos() {
+  openSheet({
+    title: 'Pontos de restauração', html: '',
+    onMount(api) {
+      const B = api.body;
+      const draw = () => {
+        const ps = pontosGet(), cp = copiaAntes();
+        B.innerHTML = '<p class="note">Ficam <b>neste aparelho</b>: protegem contra uma importação ou restauração errada, mas não contra perder o celular. Para isso, exporte o backup completo.</p>' +
+          '<button class="btn btn-sec w-full mt-3" data-act="novo">' + ic('plus') + ' Criar ponto agora</button>' +
+          (ps.length ? ps.map((p, i) => { const c = p.backup.contagens || {};
+            return '<div class="pline mt-3" style="padding:12px"><div class="font-extrabold">' + esc(dataHora(p.backup.exportadoEm)) + '</div><div class="text-[13px]" style="color:var(--txt-2)">' + esc(p.motivo) + '</div>' +
+              '<div class="text-[12.5px] mt-1" style="color:var(--txt-2)">' + (c.fichas || 0) + ' fichas · ' + (c.preparos || 0) + ' preparos · ' + (c.insumos || 0) + ' insumos · ' + (c.produtos || 0) + ' produtos · ' + (c.respostas || 0) + ' respostas de checklist</div>' +
+              '<div class="grid grid-cols-2 gap-2 mt-2"><button class="btn btn-out" style="min-height:44px" data-act="rest" data-i="' + i + '">Restaurar…</button><button class="btn btn-sec" style="min-height:44px" data-act="baixar" data-i="' + i + '">Baixar</button></div></div>'; }).join('')
+            : '<div class="empty mt-3">Nenhum ponto ainda. Eles são criados sozinhos antes de importar ou restaurar.</div>') +
+          (cp ? '<div class="lbl mt-6">Cópia de antes da atualização</div><div class="pline mt-2" style="padding:12px"><div class="font-extrabold">' + esc(dataHora(cp.criadaEm)) + '</div>' +
+            '<div class="text-[13px]" style="color:var(--txt-2)">Feita sozinha ao abrir a versão ' + esc(cp.appVersao || '') + ' pela primeira vez. Nunca é sobrescrita. Contém os cadastros como estavam (sem respostas de checklist).</div>' +
+            '<div class="grid grid-cols-2 gap-2 mt-2"><button class="btn btn-out" style="min-height:44px" data-act="cpRest">Restaurar…</button><button class="btn btn-sec" style="min-height:44px" data-act="cpBaixar">Baixar</button></div>' +
+            '<button class="btn btn-out w-full mt-2" style="min-height:44px" data-act="cpV1">Baixar no formato da versão anterior do app</button>' +
+            '<p class="text-[12.5px] mt-1" style="color:var(--txt-2)">Só para voltar à versão anterior do app. O arquivo não leva PIN nem senha: ao importar lá, o PIN e a senha voltam ao padrão e o app avisa para trocar.</p></div>' : '');
+      };
+      const cpBackup = () => { const cp = copiaAntes(); const dbAntigo = JSON.parse(cp.bruto); return Bk.montarBackup({ db: dbAntigo, operacao: { producao: null, respostas: {}, registros: [] } }, metaBackup('completo', 'Cópia automática de antes da atualização (só cadastros)')); };
+      delegate(B, {
+        novo: () => { if (criarPonto('criado manualmente')) { toast('Ponto de restauração criado'); draw(); } else alert('Sem espaço neste aparelho para guardar o ponto. Exporte um backup completo.'); },
+        rest: el => { const p = pontosGet()[+el.dataset.i]; if (p) sheetImportar({ obj: p.backup, rotulo: 'ponto de ' + dataHora(p.backup.exportadoEm), modoPadrao: 'substituir' }); },
+        baixar: el => { const p = pontosGet()[+el.dataset.i]; if (p) baixarArquivo(JSON.stringify(p.backup, null, 1), nomeArquivo('ponto')); },
+        cpRest: () => { try { sheetImportar({ obj: cpBackup(), rotulo: 'cópia de antes da atualização', modoPadrao: 'substituir' }); } catch (e) { alert('A cópia não pôde ser lida.'); } },
+        cpBaixar: () => { try { baixarArquivo(JSON.stringify(cpBackup(), null, 1), nomeArquivo('copia-antes-da-atualizacao')); } catch (e) { alert('A cópia não pôde ser lida.'); } },
+        cpV1: () => { try { const cp = copiaAntes(); baixarArquivo(JSON.stringify(Bk.paraFormatoV1(Bk.limparCadastros(JSON.parse(cp.bruto), 'completo')), null, 1), nomeArquivo('formato-anterior')); } catch (e) { alert('A cópia não pôde ser lida.'); } }
+      });
+      draw();
+    }
+  });
+}
+
+/* ---- Importar ou verificar arquivo (com prévia; nada muda antes da confirmação) ---- */
+function sheetImportar(pre) {
+  openSheet({
+    title: pre ? 'Restaurar ' + pre.rotulo : 'Importar ou verificar arquivo', html: '',
+    onMount(api) {
+      const B = api.body;
+      let lido = pre ? Bk.validarObjeto(pre.obj) : null, nomeArq = pre ? pre.rotulo : '', semPontoLiberado = false;
+      const opc = { modo: (pre && pre.modoPadrao) || 'juntar', conflitos: 'manterAparelho' };
+      const escolher = () => {
+        B.innerHTML = '<p class="note">Escolha o arquivo de backup. <b>Nada muda neste aparelho</b> até você conferir a prévia e confirmar.</p>' +
+          '<label class="btn btn-pri w-full mt-3">' + ic('upload') + ' Escolher arquivo<input type="file" id="impFile" accept=".json,application/json" class="hidden"></label>';
+        $('#impFile', B).addEventListener('change', e => {
+          const f = e.target.files && e.target.files[0]; if (!f) return;
+          const fr = new FileReader();
+          fr.onload = () => { lido = Bk.lerArquivo(String(fr.result)); nomeArq = f.name; desenhar(); };
+          fr.onerror = () => { lido = { ok: false, erros: ['Não consegui ler o arquivo.'], avisos: [] }; nomeArq = f.name; desenhar(); };
+          fr.readAsText(f);
+        });
+      };
+      const linhaCat = (nome, c) => {
+        const partes = [c.novos.length ? '<b style="color:var(--ok)">+' + c.novos.length + ' novo(s)</b>' : '', c.diferentes.length ? '<b style="color:var(--warn)">' + c.diferentes.length + ' diferente(s)</b>' : '',
+          c.identicos.length ? c.identicos.length + ' igual(is)' : '', c.soNoAparelho.length ? c.soNoAparelho.length + ' só neste aparelho' : ''].filter(Boolean);
+        if (!partes.length) return '';
+        const nomes = c.diferentes.concat(c.novos).slice(0, 6);
+        return '<li class="li" style="display:block"><div class="flex justify-between gap-2"><span class="font-bold">' + esc(nome) + '</span><span class="text-[13px] text-right">' + partes.join(' · ') + '</span></div>' +
+          (nomes.length ? '<div class="text-[12px] mt-1" style="color:var(--txt-2)">' + nomes.map(esc).join(', ') + (c.diferentes.length + c.novos.length > 6 ? '…' : '') + '</div>' : '') + '</li>';
+      };
+      const desenhar = () => {
+        if (!lido) { escolher(); return; }
+        const cab = lido.cabecalho;
+        let h = '<div class="card" style="padding:14px"><div class="lbl">Arquivo</div><div class="font-bold mt-1" style="word-break:break-all">' + esc(nomeArq) + '</div>' +
+          (cab ? '<div class="text-[13px] mt-1" style="color:var(--txt-2)">' + (cab.tipo === 'equipe' ? 'Backup para a equipe' : 'Backup completo') + ' · exportado em ' + esc(dataHora(cab.exportadoEm)) + ' · formato ' + esc(cab.versaoFormato) + (cab.app && cab.app.versao ? ' · app ' + esc(cab.app.versao) : '') + '</div>' +
+            '<div class="text-[12px]" style="color:var(--txt-2)">Origem: ' + esc(cab.origem || '—') + ' · ' + esc(cab.idExportacao || '') + '</div>'
+            : lido.formato === 'antigo' ? '<div class="text-[13px] mt-1" style="color:var(--txt-2)">Backup no formato da versão anterior do app</div>' : '') + '</div>';
+        if (!lido.ok) {
+          B.innerHTML = h + '<div class="warnline mt-3">' + ic('warn', 18, 2.4) + ' Este arquivo não pode ser importado. Nada foi alterado.</div><ul class="mt-2" style="padding-left:18px;list-style:disc;font-size:14px;line-height:1.5">' + lido.erros.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul>' +
+            (pre ? '' : '<button class="btn btn-sec w-full mt-4" data-act="outro">Escolher outro arquivo</button>');
+          return;
+        }
+        h += '<div class="okline mt-3">' + ic('check', 18, 2.6) + (lido.formato === 'atual' ? ' Integridade verificada: o conteúdo é o mesmo que foi exportado.' : ' Arquivo lido (formato antigo, sem verificação de integridade).') + '</div>';
+        if (lido.avisos.length) h += '<details class="card mt-3" style="padding:12px 14px"><summary class="font-bold" style="color:var(--warn)">' + lido.avisos.length + ' aviso(s) — toque para ver</summary><ul class="mt-2" style="padding-left:18px;list-style:disc;font-size:13.5px;line-height:1.5">' + lido.avisos.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul></details>';
+        if (lido.tipo === 'equipe') h += '<p class="note mt-3">Arquivo da equipe: não traz preços, custos nem registros. <b>Os preços e custos deste aparelho continuam.</b></p>';
+        const cmp = Bk.comparar({ db: DB, operacao: operacaoAtual() }, lido.dados, lido.tipo);
+        const ordem = Bk.COLECOES.concat(['config', 'respostas', 'registros', 'producao']).filter(k => cmp[k]);
+        h += '<div class="lbl mt-5">Comparação com este aparelho</div><ul class="ul mt-1">' + ordem.map(k => linhaCat(Bk.NOMES[k], cmp[k])).join('') + '</ul>';
+        const temDif = ordem.some(k => cmp[k].diferentes.length), temSo = Bk.COLECOES.some(k => cmp[k] && cmp[k].soNoAparelho.length);
+        h += '<div class="lbl mt-5">Como importar</div><div class="seg mt-2">' + [['juntar', 'Juntar (recomendado)'], ['substituir', 'Substituir cadastros']].map(([v, t]) => '<button class="' + (opc.modo === v ? 'on' : '') + '" data-act="modo" data-v="' + v + '">' + t + '</button>').join('') + '</div>';
+        if (opc.modo === 'juntar') {
+          h += '<p class="text-[13.5px] mt-2 leading-relaxed">Acrescenta o que é novo. Nada que existe só neste aparelho é apagado.</p>';
+          if (temDif) h += '<div class="fl mt-2">Nos registros diferentes:</div><div class="seg seg-sm mt-1">' + [['manterAparelho', 'Manter os deste aparelho'], ['usarArquivo', 'Usar os do arquivo']].map(([v, t]) => '<button class="' + (opc.conflitos === v ? 'on' : '') + '" data-act="conf" data-v="' + v + '">' + t + '</button>').join('') + '</div>';
+        } else h += '<p class="text-[13.5px] mt-2 leading-relaxed">Os cadastros ficam iguais aos do arquivo.' + (temSo ? ' <b>O que existe só neste aparelho sai dos cadastros</b> (continua guardado no ponto de restauração).' : '') + ' Respostas de checklist e registros nunca são apagados.</p>';
+        h += '<p class="note mt-3">' + ic('lock', 16, 2.4) + ' O PIN e a senha deste aparelho <b>não mudam</b>: eles não vêm em nenhum backup.</p>' +
+          '<label class="check mt-3" style="font-size:14px"><input type="checkbox" data-ch="ent"> Entendi. Antes de importar, o app guarda um ponto de restauração com os dados atuais.</label>' +
+          '<p id="impErr" class="err mt-2"></p>' +
+          '<button class="btn btn-pri w-full mt-1" data-act="aplicar">' + ic('check') + ' Importar agora</button>' +
+          (pre ? '' : '<button class="btn btn-out w-full mt-2" data-act="outro">Escolher outro arquivo</button>');
+        B.innerHTML = h;
+      };
+      let entendi = false;
+      delegate(B, {
+        outro: () => { lido = null; desenhar(); },
+        modo: el => { opc.modo = el.dataset.v; entendi = false; desenhar(); },
+        conf: el => { opc.conflitos = el.dataset.v; entendi = false; desenhar(); },
+        baixarAntes: async () => { await exportarBackup('completo'); semPontoLiberado = true; $('#impErr', B).textContent = 'Backup baixado. Toque em "Importar agora" de novo.'; },
+        aplicar: () => {
+          const err = $('#impErr', B);
+          if (!entendi) { err.textContent = 'Marque a caixa "Entendi" para continuar.'; return; }
+          if (!criarPonto('antes de importar ' + nomeArq) && !semPontoLiberado) {
+            err.innerHTML = 'Não há espaço neste aparelho para o ponto de restauração. Baixe um backup completo antes. <button class="btn btn-sec w-full mt-2" data-act="baixarAntes">Baixar backup completo agora</button>';
+            return;
+          }
+          const r = Bk.aplicar({ db: DB, operacao: operacaoAtual() }, lido.dados, lido.tipo, opc);
+          const antes = DB;
+          DB = normalize(r.db);
+          if (!save()) { DB = antes; err.textContent = 'Não foi possível gravar. Nada foi alterado.'; return; }
+          gravarOperacao(r.operacao);
+          UI.prop.pcts = clone(DB.config.props);
+          api.close(); toast('Importação concluída. Ponto de restauração criado antes.'); render();
+        }
+      }, null, { ent: el => { entendi = el.checked; } });
+      desenhar();
+    }
+  });
+}
+
+/* ---- Diagnóstico: o que é dado de fábrica e o que foi cadastrado neste aparelho ---- */
+function sheetDiag() {
+  const d = Bk.diagnosticoSemente(DB, seedDB()), op = operacaoAtual(), cp = copiaAntes();
+  let bytes = 0; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('balayo_') === 0) bytes += (k.length + (localStorage.getItem(k) || '').length) * 2; } } catch (e) {}
+  const instalado = window.navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+  openSheet({
+    title: 'Diagnóstico deste aparelho',
+    html: '<p class="note">Mostra o que ainda é igual ao padrão de fábrica (dados de exemplo e estimativas) e o que foi criado ou alterado aqui. <b>Vale só para este aparelho.</b></p>' +
+      '<ul class="ul mt-3">' + Bk.COLECOES.map(col => { const x = d[col];
+        return '<li class="li" style="display:block"><div class="flex justify-between"><b>' + esc(Bk.NOMES[col]) + '</b><b>' + x.total + '</b></div><div class="text-[12.5px]" style="color:var(--txt-2)">' +
+          x.fabrica + ' de fábrica sem alteração · ' + x.alterados + ' alterado(s) · ' + x.criados + ' criado(s) aqui' + (x.removidos ? ' · ' + x.removidos + ' de fábrica apagado(s)' : '') + '</div></li>'; }).join('') + '</ul>' +
+      '<div class="lbl mt-5">Operação neste aparelho</div><ul class="ul mt-1">' +
+      '<li class="li"><span>Respostas de checklist guardadas</span><b>' + Object.keys(op.respostas).length + '</b></li>' +
+      '<li class="li"><span>Registros (acessos e checklists)</span><b>' + op.registros.length + '</b></li>' +
+      '<li class="li"><span>Itens na lista de produção</span><b>' + (op.producao.itens || []).length + '</b></li>' +
+      '<li class="li"><span>Pontos de restauração</span><b>' + pontosGet().length + '</b></li>' +
+      '<li class="li"><span>Cópia de antes da atualização</span><b>' + (cp ? esc(dataHora(cp.criadaEm)) : 'não há') + '</b></li>' +
+      '<li class="li"><span>Espaço usado pelo app</span><b>' + nf(bytes / 1024, 0) + ' KB</b></li>' +
+      '<li class="li"><span>Aberto pelo app instalado</span><b>' + (instalado ? 'sim' : 'não (navegador)') + '</b></li>' +
+      '<li class="li"><span>Identificação técnica do aparelho</span><b>' + esc('aparelho_' + aparelhoId()) + '</b></li></ul>' +
+      '<p class="note mt-4"><b>Outros celulares podem ter cadastros diferentes.</b> Para comparar: exporte o backup completo em cada aparelho e, aqui, use "Importar ou verificar arquivo". A prévia mostra as diferenças sem mudar nada.</p>'
+  });
+}
+
+/* ---- Outra aba ou janela gravou dados mais novos ---- */
+let avisoAbaAberto = false;
+function avisoOutraAba() {
+  if (avisoAbaAberto) return;
+  avisoAbaAberto = true;
+  openSheet({
+    title: 'Dados alterados em outra aba',
+    html: '<p class="leading-relaxed">O app também está aberto em outra aba ou janela, e os dados foram salvos lá. Para não apagar o que foi feito lá, <b>esta tela não salvou</b> a última alteração.</p>' +
+      '<button class="btn btn-pri w-full mt-4" data-act="rec">Recarregar com os dados mais novos</button>' +
+      '<button class="btn btn-out w-full mt-2" data-act="forcar">Salvar o desta tela mesmo assim</button>' +
+      '<p class="text-[12.5px] mt-2" style="color:var(--txt-2)">"Salvar mesmo assim" substitui o que foi salvo na outra aba. Antes, o app guarda um ponto de restauração com os dados de lá.</p>',
+    onMount(api) {
+      delegate(api.body, {
+        rec: () => location.reload(),
+        forcar: () => {
+          const la = store.get(LS_KEY);
+          let ok = true; try { ok = criarPonto('dados da outra aba, antes de sobrescrever', JSON.parse(la)); } catch (e) { ok = false; }
+          if (!ok && !confirm('Não foi possível guardar um ponto de restauração com os dados da outra aba. Salvar mesmo assim?')) return;
+          ultimoSalvo = la; avisoAbaAberto = false; api.close(); if (save()) toast('Salvo');
+        }
+      });
+    },
+    onClose() { avisoAbaAberto = false; }
+  });
 }
 /* ================= ABA BAR: RECEITAS ================= */
 function compQtd(c) { return c[1] ? c[1] + (c[2] ? ' ' + c[2] : '') : 'a definir'; }
@@ -2561,12 +2816,18 @@ const ACT = {
   },
   segPin: () => sheetSenha('pin'),
   segAdm: () => sheetSenha('adm'),
-  bkExp: () => exportar(),
-  bkImp: () => $('#bkFile').click(),
+  bkExp: () => sheetExportar(),
+  bkImp: () => sheetImportar(null),
+  bkPontos: () => sheetPontos(),
+  bkDiag: () => sheetDiag(),
   bkReset: () => {
-    if (!confirm('Restaurar cardápio, preparos e insumos originais?\n\nSuas alterações e valores de compra serão apagados. PIN e senha continuam os mesmos.')) return;
+    if (!confirm('Restaurar cardápio, preparos, fichas e insumos originais?\n\nSuas alterações e valores de compra saem dos cadastros. Antes, o app guarda um ponto de restauração. PIN e senha continuam os mesmos.')) return;
+    if (!criarPonto('antes de restaurar os dados originais')) { alert('Não há espaço para o ponto de restauração. Exporte um backup completo antes. Nada foi alterado.'); return; }
     const c = DB.config, keep = { pinHash: c.pinHash, pinLen: c.pinLen, adminHash: c.adminHash, pinPadrao: c.pinPadrao, adminPadrao: c.adminPadrao };
-    DB = seedDB(); Object.assign(DB.config, keep); save(); UI.prop.pcts = clone(DB.config.props); toast('Dados originais restaurados'); render();
+    const antes = DB;
+    DB = seedDB(); Object.assign(DB.config, keep);
+    if (!save()) { DB = antes; return; }
+    UI.prop.pcts = clone(DB.config.props); toast('Dados originais restaurados. Ponto de restauração criado antes.'); render();
   },
   admLock: () => { store.del(SS_ADMIN, true); go(UI.voltar || 'dia'); toast('Saiu do modo administrador'); },
   appLock: () => { store.del(SS_ADMIN, true); store.del(LS_UNLOCK); UI.tab = 'dia'; showLock(); }
@@ -2648,6 +2909,8 @@ UI.tab = tabHash || (VIEWS[tabSalva] && tabSalva !== 'admin' ? tabSalva : 'dia')
 render();
 if (needsUnlock()) showLock();
 window.addEventListener('online', enviarPendentes);
+// Outra aba/janela gravou os cadastros: avisa em vez de deixar uma aba apagar a outra
+window.addEventListener('storage', e => { if (e.key === LS_KEY && e.newValue !== ultimoSalvo) avisoOutraAba(); });
 setTimeout(enviarPendentes, 3000);
 
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
@@ -2656,7 +2919,8 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
 // Acesso para testes no console
-window.Balayo = { db: () => DB, precificar, calcProducao, prepStats, setQtdProd, num, render };
+window.Balayo = { db: () => DB, precificar, calcProducao, prepStats, setQtdProd, num, render,
+  montarBackupAtual, operacaoAtual, sheetImportar, sheetPontos, pontosGet, criarPonto, copiaAntes, save, versao: APP_VERSAO };
 })();
 </script>
 </body>
