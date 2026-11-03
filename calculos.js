@@ -180,11 +180,84 @@
     return db;
   }
 
+  // Histórico de rendimentos: média, menor, maior e variação. Medições recusadas ficam guardadas, mas fora da conta.
+  function estatisticas(valores) {
+    const v = (valores || []).filter(positivo);
+    if (!v.length) return { n: 0 };
+    const media = v.reduce((s, x) => s + x, 0) / v.length, min = Math.min.apply(null, v), max = Math.max.apply(null, v);
+    return { n: v.length, media, min, max, variacao: (max - min) / media };
+  }
+  // Teste numa embalagem: unidades boas (aprovadas) por receita
+  function unidadesPorReceita(m) {
+    const boas = m && m.aprovadas != null && m.aprovadas >= 0 ? m.aprovadas : m && m.obtidas;
+    return m && positivo(m.receitas) && positivo(boas) ? boas / m.receitas : null;
+  }
+  function estatRendFicha(historico) {
+    const ok = (historico || []).filter(m => m && m.status !== 'recusado');
+    const st = estatisticas(ok.map(unidadesPorReceita));
+    const comPerda = ok.filter(m => positivo(m.obtidas) && typeof m.aprovadas === 'number' && m.aprovadas >= 0 && m.aprovadas <= m.obtidas);
+    st.perdaMedia = comPerda.length ? comPerda.reduce((s, m) => s + (m.obtidas - m.aprovadas) / m.obtidas, 0) / comPerda.length : null;
+    const comPeso = ok.filter(m => positivo(m.pesoPronto) && positivo(m.obtidas));
+    st.pesoMedioUn = comPeso.length ? comPeso.reduce((s, m) => s + m.pesoPronto / m.obtidas, 0) / comPeso.length : null;
+    return st;
+  }
+  // Preparo: aproveitamento = (aproveitável ou peso depois) ÷ peso antes
+  function estatRendPreparo(medicoes) {
+    const ok = (medicoes || []).filter(m => m && m.status !== 'recusado' && positivo(m.antes) && positivo(m.depois));
+    const st = estatisticas(ok.map(m => (positivo(m.aprov) ? m.aprov : m.depois) / m.antes));
+    st.perdaMedia = ok.length ? ok.reduce((s, m) => s + (1 - m.depois / m.antes), 0) / ok.length : null;
+    return st;
+  }
+
+  // Bateladas: quantidade teórica × o que dá para executar.
+  // lote = { max: receitas por batelada (batedeira, forno), inteiras: o procedimento não permite fração de receita }
+  function bateladas(mult, lote) {
+    if (!positivo(mult)) return null;
+    lote = lote || {};
+    const inteiras = !!lote.inteiras;
+    const executar = inteiras ? Math.ceil(mult - 1e-9) : mult;
+    let max = positivo(lote.max) ? lote.max : null;
+    if (max && inteiras) max = Math.max(1, Math.floor(max));
+    const n = max ? Math.ceil(executar / max - 1e-9) : 1;
+    let partes;
+    if (inteiras) { const base = Math.floor(executar / n), resto = executar - base * n; partes = Array.from({ length: n }, (_, i) => base + (i < resto ? 1 : 0)); }
+    else partes = Array.from({ length: n }, () => executar / n);
+    return { teorico: mult, executar, sobra: executar - mult, n, partes, inteiras, max };
+  }
+
+  // Preparos usados por várias fichas viram uma linha só (mesmo id de preparo), em "receitas do preparo".
+  // itens: [{ ficha, mult, excluidos }]
+  function somarPreparos(itens) {
+    const m = new Map();
+    (itens || []).forEach(x => (x.ficha.componentes || []).forEach((c, k) => {
+      if (c.tipo !== 'preparo' || !c.p) return;
+      if (c.opcional && (x.excluidos || []).indexOf(k) >= 0) return;
+      const r = (Number(c.fator) || 0) * x.mult;
+      if (!positivo(r)) return;
+      const cur = m.get(c.p) || { p: c.p, receitas: 0, usos: [] };
+      cur.receitas += r;
+      if (cur.usos.indexOf(x.ficha.nome) < 0) cur.usos.push(x.ficha.nome);
+      m.set(c.p, cur);
+    }));
+    return Array.from(m.values());
+  }
+
+  // Preço: CMV é só o peso dos ingredientes no preço; margem de contribuição é o que sobra para custos fixos e lucro (não é lucro).
+  function precoParaCmv(custoIngredientes, metaPct) {
+    return positivo(custoIngredientes) && metaPct > 0 && metaPct < 100 ? custoIngredientes / (metaPct / 100) : null;
+  }
+  function margemContribuicao(preco, custoVariavel, pctSobreVenda) {
+    if (!positivo(preco)) return null;
+    const valor = preco - (custoVariavel || 0) - preco * (pctSobreVenda || 0) / 100;
+    return { valor, pct: valor / preco * 100 };
+  }
+
   raiz.BalayoCalc = {
     acharInsumo, acharPreparo, acharFicha, acharEmbalagem,
     emGramas, naUnidadeDeCompra, precoPorUnidade, linhaInsumo, linhasPreparo, pesoTotal,
     rendimentoPreparo, expandirFicha, rendimentoEmbalagem, multPorUnidades, multPorPronto,
     custoGrupos, custoFicha, custoPorUnidade, custoPreparo, migrar,
-    dependenciasComponente, renomearComponente, excluirComponenteCat, resumoComponentes
+    dependenciasComponente, renomearComponente, excluirComponenteCat, resumoComponentes,
+    estatisticas, unidadesPorReceita, estatRendFicha, estatRendPreparo, bateladas, somarPreparos, precoParaCmv, margemContribuicao
   };
 })(typeof window !== 'undefined' ? window : globalThis);

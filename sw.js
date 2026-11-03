@@ -1,6 +1,6 @@
 // Faz o app abrir mesmo sem internet (depois do primeiro acesso)
-const CACHE = 'balayo-v6';
-const CORE = ['./', './index.html', './calculos.js?v=4', './backup.js?v=1', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
+const CACHE = 'balayo-v7';
+const CORE = ['./', './index.html', './calculos.js?v=5', './backup.js?v=2', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).catch(() => {}).then(() => self.skipWaiting()));

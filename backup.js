@@ -78,7 +78,7 @@
     COLECOES.forEach(col => { out[col] = Array.isArray(c[col]) ? c[col] : []; });
     if (tipo === 'equipe') {
       delete cfg.custos;
-      out.insumos.forEach(i => { delete i.preco; });
+      out.insumos.forEach(i => { delete i.preco; delete i.precoHist; delete i.precoEm; });
       out.produtos.forEach(p => { delete p.preco; delete p.emb; });
     }
     return out;
@@ -240,7 +240,7 @@
   }
   // Remove de uma cópia os campos que não vêm no arquivo, para comparar só o que pode mudar
   function semFinanceiro(lista, col) {
-    return (lista || []).map(x => { const c = copia(x); if (col === 'insumos') delete c.preco; if (col === 'produtos') { delete c.preco; delete c.emb; } return c; });
+    return (lista || []).map(x => { const c = copia(x); if (col === 'insumos') { delete c.preco; delete c.precoHist; delete c.precoEm; } if (col === 'produtos') { delete c.preco; delete c.emb; } return c; });
   }
   function comparar(atual, dados, tipo) {
     const cadA = limparCadastros(atual.db, 'completo'), cadF = dados.cadastros, res = {};
@@ -274,7 +274,7 @@
     // Equipe: preços e custos deste aparelho continuam valendo
     const restauraFinanceiro = (col, novo, antigo) => {
       if (tipo !== 'equipe' || !antigo) return novo;
-      if (col === 'insumos' && 'preco' in antigo) novo.preco = antigo.preco;
+      if (col === 'insumos') ['preco', 'precoHist', 'precoEm'].forEach(k => { if (k in antigo) novo[k] = antigo[k]; });
       if (col === 'produtos') { if ('preco' in antigo) novo.preco = antigo.preco; if ('emb' in antigo) novo.emb = antigo.emb; }
       return novo;
     };
